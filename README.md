@@ -1,2 +1,2 @@
 # MoJiaTec.github.io
-hello world
+墨家科技
