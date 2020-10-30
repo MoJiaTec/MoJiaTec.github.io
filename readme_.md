@@ -33,7 +33,7 @@ int32 UMaterialExpressionLandscapeSortBasedLayerBlend::Compile(FMaterialCompiler
 ~~~
 <br>
 
-![系统框架图\label{fig:Framework}](./asset/Framework.png)
+![系统框架图\label{fig:Framework}](./Asset/Framework.png)
 
 # 2.控制器/被控对象部分
 
