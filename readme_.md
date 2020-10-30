@@ -20,6 +20,18 @@
 
 # 1.输入部分
 
+~~~
+int32 UMaterialExpressionLandscapeSortBasedLayerBlend::Compile(FMaterialCompiler* Compiler, int32 OutputIndex)
+{
+	struct LayerWeightData
+	{
+		int32 Index;
+		FName LayerName;
+		int32 WeightCode;
+	};
+}
+~~~
+
 # 2.控制器/被控对象部分
 
 # 3.输出/反馈部分
