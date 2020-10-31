@@ -22,38 +22,52 @@
 &emsp;&emsp;场景复杂度，从广义上讲，就是有场景对象的数量和内容细节决定。更细化一点，每个对象的内容包括Mesh，纹理，材质等核心要素。
 &emsp;&emsp;控制场景复杂度，最终的目标就是要让游戏平滑的运行，并尽量保持低功耗。要达到这样的目的，就要从场景对象消耗的CPU、GPU、内存方面入手。即控制显示哪些对象，对象的加载与卸载，显示与隐藏，对象的质量(LOD)等。
 
-显示哪些对象
-加载与卸载
-Visibility检测，决定最终
-显示与隐藏
-LOD策略
-
+## 1.1 系统框架
 &emsp;&emsp;如何把这些控制手段整合到一个稳健、智能的控制系统里，是我们这里要考虑的内容。
 &emsp;&emsp;在工业控制理论里，有两种常用的控制系统模型：正反馈和负反馈。若反馈信号与输入信号极性相同或变化方向同相，则两种信号混合的结果将使放大器的净输入信号大于输出信号，这种反馈叫正反馈。正反馈主要用于信号产生电路。反之，反馈信号与输入信号极性相反或变化方向相反（反相），则叠加的结果将使净输入信号减弱，这种反馈叫负反馈放大电路和自动控制系统通常采用负反馈技术以稳定系统的工作状态。
 &emsp;&emsp;很显然，我们的目标是在任意平台任意场景下，达到一个稳定的FPS输出，所以我们需要采用负反馈控制系统模型。
 
 ![系统框架图\label{fig:Framework}](Framework.png)
 
-# 2.输入部分
+## 1.2 系统模块
 
+# 2.输入模块
+
+## 2.1 复杂度评估
+
+## 2.2 Budget计算与分配
 
 <br>
 
-特殊对象的处理
-Landscape 低模代理
+## 2.3 特殊对象的处理
+###2.3.1 Landscape 
+低模代理
 
-&emsp;&emspFoliage Imposter
+###2.3.2 Foliage 
+Imposter
 ![植被Imposter\label{fig:imposter}](imposter.png)
 ![植被ImposterDiffuse\label{fig:ImposterDiffuse}](ImposterDiffuse.png)
 ![植被ImposterNormal\label{fig:ImposterNormal}](ImposterNormal.png)
 ![植被ImposterSSS\label{fig:ImposterSSS}](ImposterSSS.png)
 
-&emsp;&emsp阴影处理 分帧Shadow Cache
-![阴影ShadowCacheDepth\label{fig:ShadowCacheDepth}](ShadowCacheDepth.png)
+
+# 3.控制器/被控对象模块
+
+## 3.1 场景对象选择
+## 3.2 场景对象加载与卸载
+## 3.3 Visibility检测
+## 3.4 场景对象显示与隐藏
+## 3.5 LOD策略
+## 3.5 其他调节策略
 
 
-# 3.控制器/被控对象部分
 
+# 4.输出/反馈模块
+##4.1 输出数据采集
+
+##4.2 反馈数据采集
+
+##4.3 反馈控制器算法
 ~~~
 enum EPerformanceWarningLevel
 {
@@ -98,7 +112,5 @@ protected:
 	int maxGPULevel;
 };
 ~~~
-
-# 4.输出/反馈部分
 
 # 5.总结
