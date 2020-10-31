@@ -40,10 +40,10 @@
 <br>
 
 ## 2.3 特殊对象的处理
-###2.3.1 Landscape 
+### 2.3.1 Landscape 
 低模代理
 
-###2.3.2 Foliage 
+### 2.3.2 Foliage 
 Imposter
 ![植被Imposter\label{fig:imposter}](imposter.png)
 ![植被ImposterDiffuse\label{fig:ImposterDiffuse}](ImposterDiffuse.png)
@@ -63,11 +63,11 @@ Imposter
 
 
 # 4.输出/反馈模块
-##4.1 输出数据采集
+## 4.1 输出数据采集
 
-##4.2 反馈数据采集
+## 4.2 反馈数据采集
 
-##4.3 反馈控制器算法
+## 4.3 反馈控制器算法
 ~~~
 enum EPerformanceWarningLevel
 {
