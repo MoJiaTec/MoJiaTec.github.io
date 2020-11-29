@@ -111,7 +111,7 @@ UE4的Mesh Lod Streaming和Texture Streaming一样是加载[RequiredLodLevel ,Ma
 &emsp;&emsp;大世界场景，比较典型的场景物件有大面积地形，大规模植被等。这两类对象有屏幕占比高，实例数量多的特点，是场景复杂度的重要来源。如何处理这两类对象，降低场景复杂度，也是我们需要重点关注的内容。
 
 ### 2.5.1 Landscape 
-地形系统与地形低模代理方案<br>
+#### 2.5.1.1 地形系统与地形低模代理方案<br>
 &emsp;&emsp;UE的地形系统，采用的是Geo-Mipmap，他的优点是LOD生成简单，顶点缓冲区、索引缓冲区可以共用等。另外,UE的地形系统，渲染单位是component，并且地表渲染用的是多层layer根据weightmap texture进行混合的方案，为了减少材质复杂度和采样数，UE会为每个component生成一个独立的material instance。基于这些实现和优化，导致了相应的缺点，如component无法合批渲染，使得大地形的DrawCall很高。LOD的区分只和屏幕占比有关，使得无法区分不同地形区域对于地形mesh的细节需求，如山丘和平地有可能使用相同的LOD,要么因为高LOD造成细节丢失，要么因为低LOD造成顶点浪费等。
 &emsp;&emsp;基于上述的分析，在使用ue地形系统来构造大世界，我们选择近处使用地形系统来表现细节，远处使用地形低模代理来表现轮廓的方案。这样可以表现大世界的同时，也极大的降低了复杂度，如DrawCall,材质复杂度等。<br>
 
@@ -121,7 +121,7 @@ UE4的Mesh Lod Streaming和Texture Streaming一样是加载[RequiredLodLevel ,Ma
 公式如下：
 ![分割公式\label{fig:SplitFormula}](SplitFormula.png)
 
-地形渲染的合批方案<br>
+#### 2.5.1.2 地形渲染的合批方案<br>
 &emsp;&emsp;虽然地形低模代理方案在一定程度上缓解了DrawCall过高的问题，但同时也会增加Mesh和纹理的使用量，本质上是一种空间换时间的方法。所以根据不同硬件平台的特性，我们需要在地形和低模代理直接取一个合适的边界。所以，我们也需要考虑地形系统自身的合批方案，从而降低地形系统自身的DrawCall消耗。根据上面对于UE地形系统的分析，我们可以使用Virtual Texture,把地形渲染时需要的纹理统一通过VT来存储，因此相同LOD的地形component可以合批渲染。
 &emsp;&emsp;VT是比较成熟的渲染技术，这里不过多阐述，需要注意的是要进行压缩格式的处理，比如ASTC，否则带宽消耗会比较可观，下图是VT原理示意图：
 ![vt\label{fig:virtualtexture}](virtualtexture.png)
