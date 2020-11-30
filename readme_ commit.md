@@ -25,7 +25,7 @@
 &emsp;&emsp;场景复杂度，从广义上讲，就是有场景对象的数量和内容细节决定。更细化一点，每个对象的内容包括Mesh，纹理，材质等核心要素。<br>
 &emsp;&emsp;控制场景复杂度，最终的目标就是要让游戏平滑的运行，并尽量保持低功耗。要达到这样的目的，就要从场景对象消耗的CPU、GPU、内存、带宽方面入手。即控制显示哪些对象，对象的加载与卸载，显示与隐藏，对象的质量(LOD)等。<br>
 &emsp;&emsp;根据之前的项目经验，我们往往会使用Visibility检测算法、LOD策略等，来简单决定场景物件的显示和显示质量，没有一个很好的衡量标准来检测和反馈有效性和准确性。更没有把这些复杂度控制方法整合到一个统一的系统里面，并通过系统的实际运行数据，来准确或者相对准确的来决定我们使用何种控制手段以及如何控制场景复杂度。<br>
-&emsp;&emsp;以上这些，就是我们提出创建一个大世界的场景复杂度控制系统的出发点。<br>
+&emsp;&emsp;以上这些，就是我们提出大世界的场景复杂度控制方案的出发点。<br>
 
 ## 1.1 渲染框架
 &emsp;&emsp;从游戏运行层面看，硬件平台的核心资源包括：cpu，gpu，内存、带宽（这里特指soc架构的移动平台）。
@@ -64,19 +64,18 @@ gpu thread，负责执行渲染命令。<br>
 &emsp;&emsp;场景的复杂度，是场景中所有对象复杂度的总和。关于复杂度的定义，根据之前渲染架构一节对于硬件平台的核心资源分析，我们把对于核心资源消耗的因素，统一称作复杂度要素。为了简化模型和算法原型，我们这里关注的场景对象的复杂度，主要由mesh，纹理，材质等核心要素决定。在确定物件的物理复杂度之后，我们还要根据物件的距离(Distance)、屏幕占比(ScreenSize)、重要程度(根据需要人为定义，比如社交属性等)等因素，并根据预先设计的因子权重系数，计算出对象的评分(Ticket)，这个数据将用于后面控制模块的复杂度控制算法中。<br>
 
 ## 2.1 对象复杂度评估
-mesh 内存 带宽 gpu
-纹理 带宽
-材质 gpu
-
-&emsp;&emsp;另外，
-drawcall 状态切换 cpu gpu
-静态合批，动态合批
+&emsp;&emsp;本方案，对于复杂度的评估，基于简化后的模型，主要包含mesh，纹理，材质三个要素。这三个要素在cook特定平台资源的时候可以得到。其中：<br>
+Mesh，主要影响加载时长，内存占用，带宽消耗，以及GPU的ALU计算量。<br>
+纹理，主要影响带宽。<br>
+材质，主要影响GPU消耗。<br>
+对于每个多级LOD Mesh，我们都会赋予每个LOD独立的Mesh、纹理和材质，从而达到通过调节LOD控制复杂度的目的。<br>
+&emsp;&emsp;另外，由Mesh引起的drawcall, 直接影响到状态切换和渲染调用带来的cpu、gpu消耗。关于drawcall的优化在下面的复杂度控制一节会提及。本方案没有把drawcall作为一个独立的复杂度因子。
 
 ## 2.2 对象评分(Ticket)计算
-&emsp;&emsp;在之前的项目优化中，我们通常会在GamePlay层面根据场景对象的社交属性（比如重要性、关注度等）调整对象的LOD、显示或隐藏，在Engine层面又会根据对象的物理属性（比如Distance、ScreenSize）再次调节对象的LOD、显示或隐藏。这种做法因为数据和控制时机的割裂，常常造成很奇怪的bug，或者调节效果不理想。所以，在本方案中，我们会根据预先设定的因子和因子权重，统一计算对象评分。然后存储在一个管理对象评分的全局对象中，并按大小排序，之后用于复杂度控制器中，智能调节对象LOD，显示隐藏，加载卸载等。<br>
+&emsp;&emsp;在之前的项目优化中，我们通常会在GamePlay层面根据场景对象的社交属性（比如重要性、关注度等）调整对象的LOD、显示或隐藏，在Engine层面又会根据对象的物理属性（比如Distance、ScreenSize）再次调节对象的LOD、显示或隐藏。这种做法因为数据和控制时机的割裂，常常造成很奇怪的bug，或者调节效果不理想。所以，在本方案中，我们会根据预先设定的因子和因子权重，统一计算对象评分。然后存储在一个管理对象评分的全局对象Ticket Manager中，并按大小排序，之后用于复杂度控制器中，智能调节对象LOD，显示隐藏，加载卸载等。<br>
 &emsp;&emsp;在Epic关于堡垒之夜的分享中，指出如何根据不同的因子，计算对象的重要等级，这个重要等级和我们之前提出的对象评分类似，下图可以直观的理解这个概念：<br>
 ![Bucket1\label{fig:Bucket1}](Bucket1.jpg)
-&emsp;&emsp;本方案的对象评分计算公式如下：<br>
+&emsp;&emsp;本方案的对象评分计算公式如下：todo 公式编辑。<br>
 &emsp;&emsp;其中：<br>
 
 ## 2.5 特殊对象的处理
@@ -106,14 +105,14 @@ drawcall 状态切换 cpu gpu
 #### 2.5.2.1 Imposter方案<br>
 &emsp;&emsp;一棵树通常需要几千面组成，一棵树的Impostor只有一个面片，两个三角形组成。Impostor通过对一棵树的多个方向进行拍照，然后根据相机和树的方向，显示对应的纹理图片。Imposter通常会作为一个独立的mesh LOD存在，因为只有一个LOD，所以可以使用ISM存储Imposter植被群，无论在数据结构还是对象复杂度，都比传统的HISM存储的多级LOD Mesh更高效。为了不降低Imposter的表现力，本方案采用的纹理信息和优化点如下:<br>
 1、两张纹理：BaseColor、Normal。<br>
-BaseColor，R、G、B通道表示BaseColor；Alpha通道：第0~6位：深度；第7位：Mask。<br>
-Normal, R、G 通道表示Normal，B通道：AO信息；Alpha通道：第0~6位, 树木的厚度，用来做SSS处理,第7位, 表示树叶和树杆分类。<br>
+BaseColor，R、G、B通道表示BaseColor；Alpha通道：第0-6位：深度；第7位：Mask。<br>
+Normal, R、G 通道表示Normal，B通道：AO信息；Alpha通道：第0-6位, 树木的厚度，用来做SSS处理,第7位, 表示树叶和树杆分类。<br>
 2、增强立体感。法线进行球面处理：<br>
   OriNormal：捕捉拍到的法线。<br>
   SphereNormal: 球面法线。<br>
   NewNormal：处理后的法线.<br>
   NewNormal = lerp(OriNormal, SphereNormal, lerpParam);<br>
-  其中lerpParam 参数(0~1)，越小就越靠近原来捕捉的法线，越大就越靠近球面法线。可以通过调lerpParam参数获取想要的效果。<br>
+  其中lerpParam参数(0-1)，越小就越靠近原来捕捉的法线，越大就越靠近球面法线。可以通过调lerpParam参数获取想要的效果。<br>
 
 3、SSS效果。烘培Impostor Normal时，多增加一个渲染pass，用来生成树木的厚度图。该厚度信息保存在Normal纹理的Alpha 通道里面。树木的厚度信息用来做SSS的处理：树木的光线透视主要通过厚度来处理，越厚则光线透视越差，相反，越薄则光线投射越强。<br>
   SSS = SSS * Thickness<br>
@@ -169,17 +168,20 @@ distance culling，frustum culling, pvs，occlusion culling。<br>
 &emsp;&emsp;在Epic关于堡垒之夜的分享中，提到一个Bucket的概念，他指的是为不同重要等级的对象预先分配一个LOD段。我们这里也引入Bucket分配策略，用于调整场景对象的LOD。Bucket分配策略需要根据不同的硬件平台能力和当前选取的资源消耗等级进行合理定制。比如性能较差的移动平台，除了自身控制的角色给的Bucket比较高，剩下的角色的都比较低。下图是堡垒之夜用到的一个Bucket分配策略：
 ![Bucket2\label{fig:Bucket2}](Bucket2.jpg)
 
-
 ## 4.5 系统等级设定
 &emsp;&emsp;
 
 ## 4.6 反馈控制器模块
+&emsp;&emsp;反馈控制器模块，根据反馈的系统指标数据和期望的系统指标数据之间的差异，根据一定的策略发送控制指令到复杂度控制模块，从而达到调节场景复杂度的目的。<br>
+### 4.6.1 反馈控制器流程
+1、
 
+### 4.6.2 反馈控制器代码
 ~~~
-enum EPerformanceWarningLevel
+enum EPerformanceLevel
 {
-	NoWarning,
-	ThrottlingImminent,
+	Normal,
+	Warning,
 	Throttling,
 }
 
@@ -191,15 +193,8 @@ enum EPerformanceBottleneckType
 	TargetFrameRate,
 };
 
-/**
- * 
- */
 class NGR_API FPerformanceController
 {
-public:
-	FPerformanceController();
-	~FPerformanceController();
-
 	bool PreferRaiseLevels();
 	bool CanLowerLOD();
 
@@ -211,12 +206,14 @@ public:
 	void RaiseLOD();
 	void LowerLOD();
 
-protected:
+	void ActiveActor();
+	void DeactiveActor();
+
+	void LoadActor();
+	void UnloadActor();
+
 	int cpuLevel;
 	int gpuLevel;
-
-	int maxCPULevel;
-	int maxGPULevel;
 };
 ~~~
 
