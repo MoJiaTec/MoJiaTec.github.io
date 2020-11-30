@@ -168,15 +168,18 @@ distance culling，frustum culling, pvs，occlusion culling。<br>
 &emsp;&emsp;在Epic关于堡垒之夜的分享中，提到一个Bucket的概念，他指的是为不同重要等级的对象预先分配一个LOD段。我们这里也引入Bucket分配策略，用于调整场景对象的LOD。Bucket分配策略需要根据不同的硬件平台能力和当前选取的资源消耗等级进行合理定制。比如性能较差的移动平台，除了自身控制的角色给的Bucket比较高，剩下的角色的都比较低。下图是堡垒之夜用到的一个Bucket分配策略：
 ![Bucket2\label{fig:Bucket2}](Bucket2.jpg)
 
-## 4.5 系统等级设定
-&emsp;&emsp;
-
-## 4.6 反馈控制器模块
+## 4.5 反馈控制器模块
 &emsp;&emsp;反馈控制器模块，根据反馈的系统指标数据和期望的系统指标数据之间的差异，根据一定的策略发送控制指令到复杂度控制模块，从而达到调节场景复杂度的目的。<br>
-### 4.6.1 反馈控制器流程
-1、
+### 4.5.1 反馈控制器流程
+1、初始化。根据当前硬件平台，初始化targetFPS、Buckets等级。<br>
+2、是否可以进行调节（上一次调节是否结束，当前环境是否允许新的调节动作）。否，等待；是，跳到3。<br>
+3、根据当前CPU、GPU消耗(时间)，判断PerformanceLevel。如果CPU、GPU均小于Warning阈值，则为Normal;如果CPU、GPU任意一个大于Throttling阈值，则为Throttling；否则为Warning。<br>
+4、根据PerfermanLevel设置对应的TargetFPS。<br>
+5、判断当前Memory与目标Memory差异，如果大于安全阈值，则发出卸载对象指令。<br>
+6、根据PerfermanLevel和目标CPU、GPU、Memory与当前实际数据的差异进行调节。如果PerfermanLevel为Throttling,则发出卸载对象指令；如果PerfermanLevel为Warning，则发出隐藏对象指令或者降低LOD指令；如果PerfermanLevel为Normal，并且内存小于安全阈值且有需要加载的对象，则发出加载对象指令，否则发出显示对象指令或者升高LOD指令。（需要说明的是，因为我们采用了多级Bucket分配方案，所以如果策略允许调节Bucket Level，则先调Bucket Level，再调整对象LOD）。<br>
+7、返回2。<br>
 
-### 4.6.2 反馈控制器代码
+### 4.5.2 反馈控制器代码
 ~~~
 enum EPerformanceLevel
 {
@@ -190,18 +193,14 @@ enum EPerformanceBottleneckType
 	CPU
 	GPU,
 	Memory,
-	TargetFrameRate,
 };
 
 class FPerformanceController
 {
-	bool PreferRaiseLevels();
-	bool CanLowerLOD();
-
-	void RaiseGPULevel();
-	void LowerGPULevel();
-	void RaiseCPULevel();
-	void LowerCPULevel();
+	bool PreferAdjustBucketLevels();
+	bool CanAdjustLOD();
+	bool CanAdjustActor();
+	bool CanAdjustLoad();
 
 	void RaiseLOD();
 	void LowerLOD();
@@ -211,11 +210,11 @@ class FPerformanceController
 
 	void LoadActor();
 	void UnloadActor();
-
-	int cpuLevel;
-	int gpuLevel;
 };
 ~~~
+
+## 4.6 测试数据
+todo
 
 # 5.总结
 &emsp;&emsp;本文分析了大世界场景的典型特征，并在介绍现代硬件平台的核心资源和渲染架构的基础上，给出了复杂度的定义。结合工业控制中的负反馈控制理论和游戏运行的目标需求，提出了大世界的场景复杂度控制方案，主要原理是根据反馈的系统指标数据和期望的系统指标数据之间的差异，以及预先制定的控制策略，得到相应的控制指令，最终达到智能控制场景内容的加载卸载、显示隐藏、LOD控制的目标以及平滑的游戏运行体验。<br>
