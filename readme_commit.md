@@ -69,13 +69,17 @@ Mesh，主要影响加载时长，内存占用，带宽消耗，以及GPU的ALU�
 纹理，主要影响带宽。<br>
 材质，主要影响GPU消耗。<br>
 对于每个多级LOD Mesh，我们都会赋予每个LOD独立的Mesh、纹理和材质，从而达到通过调节LOD控制复杂度的目的。<br>
-&emsp;&emsp;另外，由Mesh引起的drawcall, 直接影响到状态切换和渲染调用带来的cpu、gpu消耗。关于drawcall的优化在下面的复杂度控制一节会提及。本方案没有把drawcall作为一个独立的复杂度因子。
+&emsp;&emsp;另外，由Mesh引起的drawcall, 直接影响到状态切换和渲染调用带来的cpu、gpu消耗。关于drawcall的优化在下面的复杂度控制一节会提及。本方案没有把drawcall作为一个独立的复杂度因子。\[ \begin{pmatrix} a&b\\c&d \end{pmatrix} \quad
+\begin{bmatrix} a&b\\c&d \end{bmatrix} \quad
+\begin{Bmatrix} a&b\\c&d \end{Bmatrix} \quad
+\begin{vmatrix} a&b\\c&d \end{vmatrix} \quad
+\begin{Vmatrix} a&b\\c&d \end{Vmatrix} \]
 
 ## 2.2 对象评分(Ticket)计算
 &emsp;&emsp;在之前的项目优化中，我们通常会在GamePlay层面根据场景对象的社交属性（比如重要性、关注度等）调整对象的LOD、显示或隐藏，在Engine层面又会根据对象的物理属性（比如Distance、ScreenSize）再次调节对象的LOD、显示或隐藏。这种做法因为数据和控制时机的割裂，常常造成很奇怪的bug，或者调节效果不理想。所以，在本方案中，我们会根据预先设定的因子和因子权重，统一计算对象评分。然后存储在一个管理对象评分的全局对象Ticket Manager中，并按大小排序，之后用于复杂度控制器中，智能调节对象LOD，显示隐藏，加载卸载等。<br>
 &emsp;&emsp;在Epic关于堡垒之夜的分享中，指出如何根据不同的因子，计算对象的重要等级，这个重要等级和我们之前提出的对象评分类似，下图可以直观的理解这个概念：<br>
 ![Bucket1\label{fig:Bucket1}](Bucket1.jpg)
-&emsp;&emsp;本方案的对象评分计算公式如下：todo 公式编辑。<br>
+&emsp;&emsp;本方案的对象评分计算公式如下：todo $ E=mc^2 $公式编辑。<br>
 &emsp;&emsp;其中：<br>
 
 ## 2.5 特殊对象的处理
