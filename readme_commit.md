@@ -57,7 +57,7 @@ gpu thread，负责执行渲染命令。<br>
 反馈控制部分：<br>
 场景预处理模块，主要指对于场景对象的预处理，用于场景复杂度降维，把全场景复杂度降至当前视野复杂度，主要是指Visibility检测算法。<br>
 反馈控制器模块，主要用于根据反馈的系统指标数据和期望的系统指标数据之间的差异，根据一定的策略发送控制指令到复杂度控制模块。<br>
-复杂度控制器模块，根据接收到的控制指令，进行相应操作，如调节LOD、加载卸载对象、显示隐藏对象等。<br>
+复杂度控制器模块，根据接收到的控制指令，进行相应操作，如加载卸载对象、显示隐藏对象、调节LOD等。<br>
 
 
 # 2.输入部分
@@ -68,19 +68,27 @@ gpu thread，负责执行渲染命令。<br>
 Mesh，主要影响加载时长，内存占用，带宽消耗，以及GPU的ALU计算量。<br>
 纹理，主要影响带宽。<br>
 材质，主要影响GPU消耗。<br>
-对于每个多级LOD Mesh，我们都会赋予每个LOD独立的Mesh、纹理和材质，从而达到通过调节LOD控制复杂度的目的。<br>
-&emsp;&emsp;另外，由Mesh引起的drawcall, 直接影响到状态切换和渲染调用带来的cpu、gpu消耗。关于drawcall的优化在下面的复杂度控制一节会提及。本方案没有把drawcall作为一个独立的复杂度因子。\[ \begin{pmatrix} a&b\\c&d \end{pmatrix} \quad
-\begin{bmatrix} a&b\\c&d \end{bmatrix} \quad
-\begin{Bmatrix} a&b\\c&d \end{Bmatrix} \quad
-\begin{vmatrix} a&b\\c&d \end{vmatrix} \quad
-\begin{Vmatrix} a&b\\c&d \end{Vmatrix} \]
+对于多级LOD Mesh，我们都会赋予每级LOD独立的Mesh、纹理和材质，针对每级LOD计算一个复杂度。计算公式如下：<br>
+\[c = \Sigma\sigma_{i} c_{i} \]
+\[c_{i} = g(x) \]
+&emsp;&emsp;其中c为总的复杂度，$ c_{i} $为某个复杂度因子算出的复杂度，$ g(x) $为某个复杂度因子的评估函数，$ sigma_{i} $为某个复杂度因子的权重系数，不同因子的权重系数可以根据硬件平台进行定制。我们这里选择把不同因子的复杂度整合为一个总的数值，是为了方便计算后面的对象评分和总的场景复杂度。不同项目也可以根据实际需要将不同因子的复杂度作为独立项单独存储。
 
 ## 2.2 对象评分(Ticket)计算
 &emsp;&emsp;在之前的项目优化中，我们通常会在GamePlay层面根据场景对象的社交属性（比如重要性、关注度等）调整对象的LOD、显示或隐藏，在Engine层面又会根据对象的物理属性（比如Distance、ScreenSize）再次调节对象的LOD、显示或隐藏。这种做法因为数据和控制时机的割裂，常常造成很奇怪的bug，或者调节效果不理想。所以，在本方案中，我们会根据预先设定的因子和因子权重，统一计算对象评分。然后存储在一个管理对象评分的全局对象Ticket Manager中，并按大小排序，之后用于复杂度控制器中，智能调节对象LOD，显示隐藏，加载卸载等。<br>
-&emsp;&emsp;在Epic关于堡垒之夜的分享中，指出如何根据不同的因子，计算对象的重要等级，这个重要等级和我们之前提出的对象评分类似，下图可以直观的理解这个概念：<br>
+&emsp;&emsp;下图可以直观的理解这个概念：<br>
 ![Bucket1\label{fig:Bucket1}](Bucket1.jpg)
-&emsp;&emsp;本方案的对象评分计算公式如下：todo $ E=mc^2 $公式编辑。<br>
-&emsp;&emsp;其中：<br>
+&emsp;&emsp;本方案的对象评分计算公式如下：<br>
+\[T = \Sigma\omega_{i} t_{i} \]
+\[t_{i} = f(x) \]
+&emsp;&emsp;其中T为对象总的评分，$ t_{i} $为某个因子算出的评分，$ f(x) $为某个因子的评估函数，$ omega_{i} $为某个因子的权重系数。在计算复杂度的评估函数中，我们引入了ScreenSize变量，因为这个变量对于材质复杂度的影响比较大。<br>
+&emsp;&emsp;之所以要采用权重系数，是为了隔离每一项因子进行独立的权重计算（即更方面抽象出评估函数$ f(x) $），并将公式中的每一项因子权重$ t_{i} $进行归一化，再通过$ omega_{i} $ 调节每一项因子所占的权重来确定该因子的重要程度。通过这样的权重系数设计，更方便策划和程序来调试系统的数值和功能。
+
+## 2.3 Bucket分配
+&emsp;&emsp;根据硬件平台的能力，我们会制定出不同的预算配置，即Bucket的概念，他指的是为不同重要等级的对象预先分配一个LOD段，根据对象评分，将对象动态移动到某个LOD端，。Bucket分配策略需要根据不同的硬件平台能力和当前选取的资源消耗等级进行合理定制。比如性能较差的移动平台，除了自身控制的角色给的Bucket比较高，剩下的角色的都比较低。下图是一个Bucket分配策略示意图：
+![Bucket2\label{fig:Bucket2}](Bucket2.jpg)
+
+## 2.4 系统指标制定
+&emsp;&emsp;根据硬件平台的能力，我们为不同的FPS数值，设置对应的场景复杂度总量、CPU时间、GPU时间、DrawCall数值和Memory数值。根据当前场景复杂度，系统会自动选一个合适的FPS数值作为目标，并根据CPU时间、GPU时间、DrawCall数值和Memory数值动态调整场景复杂度，以期在目标FPS上稳定运行游戏。
 
 ## 2.5 特殊对象的处理
 &emsp;&emsp;大世界场景，比较典型的场景物件有大面积地形，大规模植被等。这两类对象有屏幕占比高，实例数量多的特点，是场景复杂度的重要来源。如何处理这两类对象，可以极大的降低场景复杂度，也是我们需要重点关注的内容。
@@ -133,7 +141,7 @@ Normal, R、G 通道表示Normal，B通道：AO信息；Alpha通道：第0-6位,
 ![植被ImposterSSS\label{fig:ImposterSSS_s}](ImposterSSS_s.png)
 
 # 3.输出部分
-&emsp;&emsp;输出部分除了将场景呈现给玩家的渲染模块，还有用于检测系统运行时的指标数据，包括FPS,CPU、GPU、内存、带宽、电量消耗等数据。想要精确的获取CPU、GPU和电量消耗，十分依赖与硬件平台的驱动特性，实际上在大部分情况下，我们没有办法简单有效的拿到这些数据。根据我们设计的系统，可以简化问题需求，我们只需要高效并相对准确的获取FPS、CPU和GPU时间、以及内存和带宽数据。UE本身已经实现了一套性能数据检测机制，可以获取上述数据，具体可以参看UE官方网站的Stats System OverView。
+&emsp;&emsp;输出部分除了将场景呈现给玩家的渲染模块，还有用于检测系统运行时的指标数据，包括FPS,CPU、GPU、内存、带宽、电量消耗等数据。想要精确的获取CPU、GPU和电量消耗，十分依赖与硬件平台的驱动特性，实际上在大部分情况下，我们没有办法简单有效的拿到这些数据。根据我们设计的系统，可以简化问题需求，我们只需要高效并相对准确的获取FPS、CPU和GPU时间、以及内存和带宽数据。UE本身已经实现了一套性能数据检测机制，可以获取上述数据，具体可以参看UE官方网站的Stats System OverView，这里不做过多阐述。本方案采用UE已有机制，获取FPS、DrawCall、CPU时间、GPU时间和Memory数据，作为运行期的反馈数据，和系统指标模块数据进行对比，作为反馈数据输入给反馈控制模块。
 
 # 4.反馈控制部分
 &emsp;&emsp;在介绍反馈控制部分的各个模块之前，我们首先明确两个概念：低帧率和卡顿。<br>
@@ -141,11 +149,12 @@ Normal, R、G 通道表示Normal，B通道：AO信息；Alpha通道：第0-6位,
 &emsp;&emsp;需要指出的是，本文提出的场景复杂度控制系统，目标在于改善和优化低帧率问题，能缓解部分加载引起的卡顿问题。
 
 ## 4.1 复杂度控制模块
-&emsp;&emsp;在游戏运行时，当场景对象确定之后，复杂度控制的本质就是如何在设定的策略下，在有限的硬件资源条件下尽可能多的显示更多更好的东西，即在性能和画面之间取得一个较好的平衡。常用的方法包括：<br>
+&emsp;&emsp;在游戏运行时，当场景对象确定之后，复杂度控制的本质就是如何在设定的策略和有限的硬件资源条件下，尽可能多的显示更多更好的物件，即在性能和画面之间取得一个较好的平衡。常用的方法包括：<br>
 选取合适的对象lod。<br>
 合理的显示、隐藏。<br>
 适当的加载、卸载。<br>
 优化drawcall,无论是静态合批、动态合批、HLOD,都是在空间和时间取得平衡。<br>
+&emsp;&emsp;另外，由Mesh引起的drawcall, 直接影响到状态切换和渲染调用带来的cpu、gpu消耗。关于drawcall的优化在下面的复杂度控制一节会提及。本方案没有把drawcall作为一个独立的复杂度因子。
 其他优化手段诸如gpu driven，本质上是增加剔除的精确性、减少剔除消耗、利用indirect command和vt减少渲染时cpu与gpu的交互消耗以及状态切换消耗。<br>
 &emsp;&emsp;在我们方案中，我们的目标是智能控制场景内容的加载卸载、显示隐藏、LOD控制。关于drawcall的优化，可以依赖UE自身功能,离线或运行期进行。gpu driven优化，也可与本方案无缝集成，本方案的输出作为gpu driven的输入，gpu driven在特定情况下可以提高裁剪和渲染效率。基于上述分析，我们方案的复杂度控制模块，会接受三个类型的控制指令：调整LOD、显示隐藏对象、加载卸载对象。这三条指令的调整力度依次增强。其中：<br>
 调整LOD，选择特定的LOD，直观的表现是调整画面细节。当Game Thread、Renderer Thread、RHI Thread或者GPU Thread, 或者内存、带宽任意一个核心要素出现超负载时，应该优先考虑选择调整LOD。<br>
@@ -153,8 +162,8 @@ Normal, R、G 通道表示Normal，B通道：AO信息；Alpha通道：第0-6位,
 加载卸载对象，这种策略通常用基于内存方面的考虑。在内存富余时，加载对象；内存告警时，卸载对象。<br>
 
 ## 4.2 Visibility检测
-&emsp;&emsp;Visibility检测属于场景预处理模块，需要说明的是，他属于Runtime阶段的预处理。实际上，我们可以增加离线预处理模块，即离线检测工具，主要用于自动分析场景各区域复杂度，帮助设计人员更有效的设计场景内容。UE已经集成了一定功能的复杂度离线检测工具，用于检测mesh的顶点数、内存占用、纹理、光照贴图、材质等信息。
-&emsp;&emsp;UE目前已经集成了多种Visibility检测算法，按消耗排序依次为：<br>
+&emsp;&emsp;Visibility检测属于场景预处理模块，需要说明的是，他属于Runtime阶段的预处理。实际上，我们可以增加离线预处理模块，即离线检测工具，主要用于自动分析场景各区域复杂度，帮助设计人员更有效的设计场景内容。UE已经集成了一定功能的复杂度离线检测工具，用于检测mesh的顶点数、内存占用、纹理、光照贴图、材质等信息。<br>
+&emsp;&emsp;UE内置了多种Visibility检测算法，按消耗排序依次为：<br>
 distance culling，frustum culling, pvs，occlusion culling。<br>
 &emsp;&emsp;其中oc根据实现方式可以分为hardware oc, hzb oc, software oc。hardware oc利用图形API Query查询对象的可见性，不会增加DrawCall，但是需要回读GPU数据，所以存在延时的问题，导致Pop in等现象，并且在执行效率和裁剪有效性上也存在一定的问题。hzb oc需要hzb的支持，移动平台通常没有这个数据，而且hzb oc的裁剪偏保守，在裁剪有效性上存在问题。所以移动平台通常使用的时software oc，基于算法和simd的优化，可以保证实时性和裁剪有效性。<br>
 &emsp;&emsp;下图是我们根据intel nask oc在移动平台优化定制的示意图：
@@ -171,10 +180,6 @@ distance culling，frustum culling, pvs，occlusion culling。<br>
 对于显示类对象，根据其对画面的贡献(屏幕占比、透明度等)，选在在合适的距离加载对应的LOD数据。<br>
 
 &emsp;&emsp;另外，UE实现了的Mesh Lod Streaming和Texture Streaming机制，利用这个机制，我们可以只加载指定的[RequiredLodLevel ,MaxLodLevel]区间的Lod集合。游戏运行时，合理使用这个机制，可以有效的控制因加载引起的消耗，并且可以加快显示速度。
-
-## 4.4 Bucket分配
-&emsp;&emsp;在Epic关于堡垒之夜的分享中，提到一个Bucket的概念，他指的是为不同重要等级的对象预先分配一个LOD段。我们这里也引入Bucket分配策略，用于调整场景对象的LOD。Bucket分配策略需要根据不同的硬件平台能力和当前选取的资源消耗等级进行合理定制。比如性能较差的移动平台，除了自身控制的角色给的Bucket比较高，剩下的角色的都比较低。下图是堡垒之夜用到的一个Bucket分配策略：
-![Bucket2\label{fig:Bucket2}](Bucket2.jpg)
 
 ## 4.5 反馈控制器模块
 &emsp;&emsp;反馈控制器模块，根据反馈的系统指标数据和期望的系统指标数据之间的差异，根据一定的策略发送控制指令到复杂度控制模块，从而达到调节场景复杂度的目的。<br>
@@ -232,6 +237,6 @@ class FPerformanceController
 # 参考文献
 Adaptive Virtual Texture Rendering in Far Cry 4<br>
 Terrain in Battlefield 3: A modern, complete and scalable system<br>
-UE4制作多人大地型游戏的优化<br>
 Fast Terrain Rendering Using Geometrical MipMapping<br>
 Real Time 3D Terrain Engines Using C++ And Dx9<br>
+UE4制作多人大地型游戏的优化<br>
