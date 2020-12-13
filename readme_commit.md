@@ -94,7 +94,11 @@ Mesh，主要影响加载时长，内存占用，带宽消耗，以及GPU的ALU�
 ![分割策略\label{fig:SpiltMethod}](SpiltMethod.png)
 
 公式如下：
-![分割公式\label{fig:SplitFormula}](SplitFormula.png)
+\[Split ?= \frac{ES}{D} > L \]
+\[E = error metric \]
+\[S = error scale \]
+\[D = distance to viewer \]
+\[L = ratio limit \]
 
 #### 2.5.1.2 地形渲染的合批方案<br>
 &emsp;&emsp;虽然地形低模代理方案在一定程度上缓解了DrawCall过高的问题，但同时也会增加Mesh和纹理的使用量，本质上是一种空间换时间的方法。所以根据不同硬件平台的特性，我们需要在地形和低模代理直接取一个合适的边界。所以，我们也需要考虑地形系统自身的合批方案，从而降低地形系统自身的DrawCall消耗。根据上面对于UE地形系统的分析，我们可以使用Virtual Texture,把地形渲染时需要的纹理统一通过VT来存储，因此相同LOD的地形component可以合批渲染。
