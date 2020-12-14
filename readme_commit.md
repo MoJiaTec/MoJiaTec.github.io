@@ -192,9 +192,9 @@ distance culling，frustum culling, pvs，occlusion culling。<br>
 5、根据当前GPU消耗，和目标GPU消耗进行比较，确定GPU是否过载？<br>
 &emsp;&emsp;是，{如果RHI线程没有过载，则发送降低LOD指令；如果RHI线程过载，则发送隐藏对象指令}；<br>
 &emsp;&emsp;否，跳到6。<br>
-6、根据当前RHI线程CPU消耗，和目标CPU消耗进行比较，确定RHI线程是否过载？是，{当前DrawCall是否过高？是，发送DC调节指令（切换HLOD或者在Render线程没有过载的情况下动态合批）;否，发送隐藏对象指令}；否，发送升高LOD指令或者显示对象指令或者取消HLOD指令。
-7、根据当前Render线程CPU消耗，和目标CPU消耗进行比较，确定Render线程是否过载？是，发送隐藏对象指令（调整植被等实例化对象的Scalability）；否，发送显示对象指令（调整植被等实例化对象的Scalability）。
-8、根据当前Game线程CPU消耗，和目标CPU消耗进行比较，确定Game线程是否过载？是，跳到9；否，发送加载对象指令，跳到9。
+6、根据当前RHI线程CPU消耗，和目标CPU消耗进行比较，确定RHI线程是否过载？是，{当前DrawCall是否过高？是，发送DC调节指令（切换HLOD或者在Render线程没有过载的情况下动态合批）;否，发送隐藏对象指令}；否，发送升高LOD指令或者显示对象指令或者取消HLOD指令。<br>
+7、根据当前Render线程CPU消耗，和目标CPU消耗进行比较，确定Render线程是否过载？是，发送隐藏对象指令（调整植被等实例化对象的Scalability）；否，发送显示对象指令（调整植被等实例化对象的Scalability）。<br>
+8、根据当前Game线程CPU消耗，和目标CPU消耗进行比较，确定Game线程是否过载？是，跳到9；否，发送加载对象指令，跳到9。<br>
 9、返回2。<br>
 
 ### 4.4.2 反馈控制器代码
