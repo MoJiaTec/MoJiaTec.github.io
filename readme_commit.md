@@ -77,6 +77,7 @@ Mesh，主要影响加载时长，内存占用，带宽消耗，以及GPU的ALU�
 &emsp;&emsp;在之前的项目优化中，我们通常会在GamePlay层面根据场景对象的社交属性（比如重要性、关注度等）调整对象的LOD、显示或隐藏，在Engine层面又会根据对象的物理属性（比如Distance、ScreenSize）再次调节对象的LOD、显示或隐藏。这种做法因为数据和控制时机的割裂，常常造成很奇怪的bug，或者调节效果不理想。所以，在本方案中，我们会根据预先设定的因子和因子权重，统一计算对象评分。然后存储在一个管理对象评分的全局对象Ticket Manager中，并按大小排序，之后用于复杂度控制器中，智能调节对象LOD，显示隐藏，加载卸载等。<br>
 &emsp;&emsp;下图可以直观的理解这个概念：<br>
 ![Bucket1\label{fig:Bucket1}](Bucket1.jpg)
+<br>
 &emsp;&emsp;本方案的对象评分计算公式如下：<br>
 \[T = \Sigma\omega_{i} t_{i} \]
 \[t_{i} = f(x) \]
@@ -153,11 +154,11 @@ Normal, R、G 通道表示Normal，B通道：AO信息；Alpha通道：第0-6位,
 选取合适的对象lod。<br>
 合理的显示、隐藏。<br>
 适当的加载、卸载。<br>
-优化drawcall,无论是静态合批、动态合批、HLOD,都是在空间和时间取得平衡。<br>
-&emsp;&emsp;另外，由Mesh引起的drawcall, 直接影响到状态切换和渲染调用带来的cpu、gpu消耗。关于drawcall的优化在下面的复杂度控制一节会提及。本方案没有把drawcall作为一个独立的复杂度因子。
+优化drawcall。Drawcall, 直接影响到状态切换和渲染调用带来的cpu、gpu消耗。无论是静态合批、动态合批、HLOD,都是在空间和时间取得平衡。<br>
 其他优化手段诸如gpu driven，本质上是增加剔除的精确性、减少剔除消耗、利用indirect command和vt减少渲染时cpu与gpu的交互消耗以及状态切换消耗。<br>
-&emsp;&emsp;在我们方案中，我们的目标是智能控制场景内容的加载卸载、显示隐藏、LOD控制。关于drawcall的优化，可以依赖UE自身功能,离线或运行期进行。gpu driven优化，也可与本方案无缝集成，本方案的输出作为gpu driven的输入，gpu driven在特定情况下可以提高裁剪和渲染效率。基于上述分析，我们方案的复杂度控制模块，会接受三个类型的控制指令：调整LOD、显示隐藏对象、加载卸载对象。这三条指令的调整力度依次增强。其中：<br>
-调整LOD，选择特定的LOD，直观的表现是调整画面细节。当Game Thread、Renderer Thread、RHI Thread或者GPU Thread, 或者内存、带宽任意一个核心要素出现超负载时，应该优先考虑选择调整LOD。<br>
+&emsp;&emsp;在我们方案中，我们的目标是智能控制场景内容的加载卸载、显示隐藏、LOD控制、优化drawcall。关于gpu driven优化，也可与本方案无缝集成，本方案的输出作为gpu driven的输入，gpu driven在特定情况下可以提高裁剪和渲染效率。基于上述分析，我们方案的复杂度控制模块，会接受四个类型的控制指令：调整LOD、DrawCall优化、显示隐藏对象、加载卸载对象。这四条指令的调整力度依次增强。其中：<br>
+调整LOD，选择特定的LOD，直观的表现是调整画面细节。当GPU Thread, 或者内存、带宽任意一个核心要素出现超负载时，应该优先考虑选择调整LOD。<br>
+优化DrawCall，主要依靠静态合批（切换HLOD）和动态合批，会减少DrawCall数量，减少RHI Thread负荷，但是会增加内存使用量。
 显示隐藏对象，包括显示隐藏单个场景对象，和调整对象实例群的scalability。当RHI Thread的CPU耗时过少/过多或者GPU Thread的GPU耗时过少/过多告警时，应该考虑显示/隐藏场景对象。<br>
 加载卸载对象，这种策略通常用基于内存方面的考虑。在内存富余时，加载对象；内存告警时，卸载对象。<br>
 
@@ -181,42 +182,47 @@ distance culling，frustum culling, pvs，occlusion culling。<br>
 
 &emsp;&emsp;另外，UE实现了的Mesh Lod Streaming和Texture Streaming机制，利用这个机制，我们可以只加载指定的[RequiredLodLevel ,MaxLodLevel]区间的Lod集合。游戏运行时，合理使用这个机制，可以有效的控制因加载引起的消耗，并且可以加快显示速度。
 
-## 4.5 反馈控制器模块
+## 4.4 反馈控制器模块
 &emsp;&emsp;反馈控制器模块，根据反馈的系统指标数据和期望的系统指标数据之间的差异，根据一定的策略发送控制指令到复杂度控制模块，从而达到调节场景复杂度的目的。<br>
-### 4.5.1 反馈控制器流程
-1、初始化。根据当前硬件平台，初始化targetFPS、Buckets等级。<br>
-2、是否可以进行调节（上一次调节是否结束，当前环境是否允许新的调节动作）。否，等待；是，跳到3。<br>
-3、根据当前CPU、GPU消耗(时间)，判断PerformanceLevel。如果CPU、GPU均小于Warning阈值，则为Normal;如果CPU、GPU任意一个大于Throttling阈值，则为Throttling；否则为Warning。<br>
-4、根据PerfermanLevel设置对应的TargetFPS。<br>
-5、判断当前Memory与目标Memory差异，如果大于安全阈值，则发出卸载对象指令。<br>
-6、根据PerfermanLevel和目标CPU、GPU、Memory与当前实际数据的差异进行调节。如果PerfermanLevel为Throttling,则发出卸载对象指令；如果PerfermanLevel为Warning，则发出隐藏对象指令或者降低LOD指令；如果PerfermanLevel为Normal，并且内存小于安全阈值且有需要加载的对象，则发出加载对象指令，否则发出显示对象指令或者升高LOD指令。（需要说明的是，因为我们采用了多级Bucket分配方案，所以如果策略允许调节Bucket Level，则先调Bucket Level，再调整对象LOD）。<br>
-7、返回2。<br>
+### 4.4.1 反馈控制器流程
+1、初始化。根据当前硬件平台，初始化既定目标值：targetFPS、Buckets Level、场景复杂度总量、CPU时间、GPU时间、Memory数值、Drawcall数值。<br>
+2、计算当前视口场景复杂度，和目标复杂度比较，确定是否需要根据差值决定是否切换目标值等级？是，跳到1；否，跳到3.
+3、是否可以进行调节（上一次调节是否结束，当前环境是否允许新的调节动作）？否，等待；是，跳到4。<br>
+4、根据当前内存使用量，和目标内存数值比较，确定当前内存是否报警？是，发送卸载对象指令；否，跳到5。<br>
+5、根据当前GPU消耗，和目标GPU消耗进行比较，确定GPU是否过载？<br>
+&emsp;&emsp;是，{如果RHI线程没有过载，则发送降低LOD指令；如果RHI线程过载，则发送隐藏对象指令}；<br>
+&emsp;&emsp;否，跳到6。<br>
+6、根据当前RHI线程CPU消耗，和目标CPU消耗进行比较，确定RHI线程是否过载？是，{当前DrawCall是否过高？是，发送DC调节指令（切换HLOD或者在Render线程没有过载的情况下动态合批）;否，发送隐藏对象指令}；否，发送升高LOD指令或者显示对象指令或者取消HLOD指令。
+7、根据当前Render线程CPU消耗，和目标CPU消耗进行比较，确定Render线程是否过载？是，发送隐藏对象指令（调整植被等实例化对象的Scalability）；否，发送显示对象指令（调整植被等实例化对象的Scalability）。
+8、根据当前Game线程CPU消耗，和目标CPU消耗进行比较，确定Game线程是否过载？是，跳到9；否，发送加载对象指令，跳到9。
+9、返回2。<br>
 
-### 4.5.2 反馈控制器代码
+### 4.4.2 反馈控制器代码
+&emsp;&emsp;以下为反馈控制器的主要功能类和接口定义：
 ~~~
-enum EPerformanceLevel
-{
-	Normal,
-	Warning,
-	Throttling,
-}
-
+//Bottleneck类型定义
 enum EPerformanceBottleneckType
 {
-	CPU
-	GPU,
+	FPS,
 	Memory,
+	GPU,
+	RHIThread,
+	RenderThread,	
+	GameThread,
 };
 
 class FPerformanceController
 {
-	bool PreferAdjustBucketLevels();
 	bool CanAdjustLOD();
+	bool CanAdjustHLOD();
 	bool CanAdjustActor();
 	bool CanAdjustLoad();
 
 	void RaiseLOD();
 	void LowerLOD();
+
+	void AdjustHLOD();
+	void TryDyanmicInstance();
 
 	void ActiveActor();
 	void DeactiveActor();
@@ -226,7 +232,7 @@ class FPerformanceController
 };
 ~~~
 
-## 4.6 测试数据
+## 4.5 测试数据
 ![ProfileData\label{fig:ProfileData}](ProfileData.png)
 &emsp;&emsp;上图的测试数据基于项目的实际大世界场景，12x12公里大地形，有人工建筑区域，也有户外密集的植被区域。通过测试数据可以看出，游戏在运行过程中除了几个轻微的卡顿点之外，整个fps平滑的控制在某个设定值。这几个卡顿点主要发生在地形的sublevel加载和远处的植被区域加载。如何解决加载大块资源或者如何组织场景资源来避免卡顿问题，这是我们下一步需要优化的工作。
 
