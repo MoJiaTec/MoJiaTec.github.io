@@ -29,9 +29,9 @@
 
 ## 1.1 渲染框架
 &emsp;&emsp;从游戏运行层面看，硬件平台的核心资源包括：cpu，gpu，内存、带宽（这里特指soc架构的移动平台的共享显存）。<br>
-&emsp;&emsp;现代硬件平台和图形API，总的趋势是并行渲染。UE在此基础上，渲染框架也充分利用了并行的特点，如下图
-![渲染框架\label{fig:Parallel_Rendering.png}](Parallel_Rendering.png)
-&emsp;&emsp;这个是Renderer Thread和RHI Thread的交互示意图。整个UE引擎的框架，大致可分为：<br>
+&emsp;&emsp;现代硬件平台和图形API，总的趋势是并行渲染。例如，相对于传统图形API，Vulkan一个显著特点就是对多线程友好，如下图：
+![渲染框架\label{fig:VulkanMultiThread.png}](VulkanMultiThread.png)
+&emsp;&emsp;Unreal Engne(后面简称UE)引擎本身是一个跨平台3D引擎，封装了数种流行图形API，并能运行在不同的硬件平台上。同时，充分采用了并行的优势，实现了一套多线程渲染框架。整个UE引擎的框架，大致可分为：<br>
 game thread,负责游戏逻辑，提交cpu渲染数据。<br>
 renderer thread，负责排序、剔除、生成渲染命令。<br>
 rhi thread，负责生成gpu渲染数据，提交渲染命令。<br>
@@ -89,7 +89,9 @@ Mesh，主要影响加载时长，内存占用，带宽消耗，以及GPU的ALU�
 ![Bucket2\label{fig:Bucket2}](Bucket2.jpg)
 
 ## 2.4 系统指标制定
-&emsp;&emsp;根据硬件平台的能力，我们为不同的FPS数值，设置对应的场景复杂度总量、CPU时间、GPU时间、DrawCall数值和Memory数值。根据当前场景复杂度，系统会自动选一个合适的FPS数值作为目标，并根据CPU时间、GPU时间、DrawCall数值和Memory数值动态调整场景复杂度，以期在目标FPS上稳定运行游戏。
+&emsp;&emsp;我们在开发游戏时，会经常问自己，我的游戏需要占用多少cpu、内存，需要多少帧率(FPS)。总体来说，cpu、内存占用越少越好，FPS越高越好。但又是相对的，比如FPS越高，游戏体验会更加流畅，但也意味着消耗资源更多，电量消耗更快。根据2019年中国移动游戏质量白皮书给出的建议，有如下的参考数据：
+![系统性能指标\label{fig:performance}](performance.jpg)
+&emsp;&emsp;在制定系统指标的数值时，我们需要根据游戏类型和硬件平台的能力，为不同的FPS数值，设置对应的场景复杂度总量、CPU时间、GPU时间、DrawCall数值和Memory数值。反复调试总结，最终形成一个合理的数值配置文件，作为系统指标模块的输入。在此基础上，反馈控制模块会根据当前的系统指标的预期数值和输出检测反馈数值的差值，以及根据当前场景复杂度，系统会自动选一个合适的FPS数值作为目标，并根据CPU时间、GPU时间、DrawCall数值和Memory数值动态调整场景复杂度，以期在目标FPS上稳定运行游戏。
 
 ## 2.5 特殊对象的处理
 &emsp;&emsp;大世界场景，比较典型的场景物件有大面积地形，大规模植被等。这两类对象有屏幕占比高，实例数量多的特点，是场景复杂度的重要来源。如何处理这两类对象，可以极大的降低场景复杂度，也是我们需要重点关注的内容。
@@ -142,7 +144,12 @@ Normal, R、G 通道表示Normal，B通道：AO信息；Alpha通道：第0-6位,
 ![植被ImposterSSS\label{fig:ImposterSSS_s}](ImposterSSS_s.png)
 
 # 3.输出部分
-&emsp;&emsp;输出部分除了将场景呈现给玩家的渲染模块，还有用于检测系统运行时的指标数据，包括FPS,CPU、GPU、内存、带宽、电量消耗等数据。想要精确的获取CPU、GPU和电量消耗，十分依赖与硬件平台的驱动特性，实际上在大部分情况下，我们没有办法简单有效的拿到这些数据。根据我们设计的系统，可以简化问题需求，我们只需要高效并相对准确的获取FPS、CPU和GPU时间、以及内存和带宽数据。UE本身已经实现了一套性能数据检测机制，可以获取上述数据，具体可以参看UE官方网站的Stats System OverView，这里不做过多阐述。本方案采用UE已有机制，获取FPS、DrawCall、CPU时间、GPU时间和Memory数据，作为运行期的反馈数据，和系统指标模块数据进行对比，作为反馈数据输入给反馈控制模块。
+&emsp;&emsp;输出部分除了将场景呈现给玩家的渲染模块，还有用于检测系统运行时的指标数据，包括FPS,CPU、GPU、内存、带宽、电量消耗等数据。想要精确的获取CPU、GPU和电量消耗，十分依赖与硬件平台的驱动特性。实际上在大部分情况下，我们没有办法简单有效的拿到这些数据。根据我们设计的系统，可以简化问题需求，我们只需要高效并相对准确的获取FPS、CPU和GPU时间、以及内存和带宽数据。
+## 3.1 输出检测模块
+
+## 3.2 输出检测模块
+&emsp;&emsp;UE本身已经实现了一套性能数据检测机制，可以获取上述数据，具体可以参看UE官方网站的Stats System OverView，这里不做过多阐述。
+&emsp;&emsp;本方案采用UE已有机制，获取FPS、DrawCall、CPU时间、GPU时间和Memory数据，作为运行期的反馈数据，和系统指标模块数据进行对比，作为反馈数据输入给反馈控制模块。
 
 # 4.反馈控制部分
 &emsp;&emsp;在介绍反馈控制部分的各个模块之前，我们首先明确两个概念：低帧率和卡顿。<br>
@@ -246,3 +253,5 @@ Terrain in Battlefield 3: A modern, complete and scalable system<br>
 Fast Terrain Rendering Using Geometrical MipMapping<br>
 Real Time 3D Terrain Engines Using C++ And Dx9<br>
 UE4制作多人大地型游戏的优化<br>
+Vulkan高性能渲染<br>
+2019年中国移动游戏质量白皮书<br>
