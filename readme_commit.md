@@ -30,7 +30,7 @@
 ## 1.1 渲染框架
 &emsp;&emsp;从游戏运行层面看，硬件平台的核心资源包括：cpu，gpu，内存、带宽（这里特指soc架构的移动平台的共享显存）。<br>
 &emsp;&emsp;现代硬件平台和图形API，总的趋势是并行渲染。例如，相对于传统图形API，Vulkan一个显著特点就是对多线程友好，如下图：
-![渲染框架\label{fig:VulkanMultiThread.png}](VulkanMultiThread.png)
+![渲染框架\label{fig:VulkanMultiThread}](VulkanMultiThread.jpg)
 &emsp;&emsp;Unreal Engne(后面简称UE)引擎本身是一个跨平台3D引擎，封装了数种流行图形API，并能运行在不同的硬件平台上。同时，充分采用了并行的优势，实现了一套多线程渲染框架。整个UE引擎的框架，大致可分为：<br>
 game thread,负责游戏逻辑，提交cpu渲染数据。<br>
 renderer thread，负责排序、剔除、生成渲染命令。<br>
