@@ -31,7 +31,9 @@
 &emsp;&emsp;从游戏运行层面看，硬件平台的核心资源包括：cpu，gpu，内存、带宽（这里特指soc架构的移动平台的共享显存）。<br>
 &emsp;&emsp;现代硬件平台和图形API，总的趋势是并行渲染。例如，相对于传统图形API，Vulkan一个显著特点就是对多线程友好，如下图：
 ![渲染框架\label{fig:VulkanMultiThread}](VulkanMultiThread.jpg)
-&emsp;&emsp;Unreal Engne(后面简称UE)引擎本身是一个跨平台3D引擎，封装了数种流行图形API，并能运行在不同的硬件平台上。同时，充分采用了并行的优势，实现了一套多线程渲染框架。整个UE引擎的框架，大致可分为：<br>
+&emsp;&emsp;Unreal Engne(后面简称UE)引擎本身是一个跨平台3D引擎，封装了数种流行图形API，并能运行在不同的硬件平台上。同时，充分采用了并行的优势，实现了一套多线程渲染框架。如下图所示：
+![UE\label{fig:ue}](ue.png)
+&emsp;&emsp;整个UE引擎的框架，大致可分为：<br>
 game thread,负责游戏逻辑，提交cpu渲染数据。<br>
 renderer thread，负责排序、剔除、生成渲染命令。<br>
 rhi thread，负责生成gpu渲染数据，提交渲染命令。<br>
@@ -256,6 +258,6 @@ Adaptive Virtual Texture Rendering in Far Cry 4<br>
 Terrain in Battlefield 3: A modern, complete and scalable system<br>
 Fast Terrain Rendering Using Geometrical MipMapping<br>
 Real Time 3D Terrain Engines Using C++ And Dx9<br>
+Masked Software Occlusion Culling<br>
 UE4制作多人大地型游戏的优化<br>
 Vulkan高性能渲染<br>
-2019年中国移动游戏质量白皮书<br>
