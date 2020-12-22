@@ -165,7 +165,7 @@ DECLARE_CYCLE_STAT(CounterName,StatId,GroupId)，这里的groupid就是之前定
 ![StatsType\label{fig:StatsType}](StatsType.png)
 
 ### 3.1.3 扩展定制Stats系统
-&emsp;&emsp;UE的RHIcommandlist自带了一个函数FRHICommandListImmediate::SetCurrentStat，可以用来让Render给RHI加一个标记，这个标记就可以认为是Render的某个阶段的名字，UE自带了在Render 的很多阶段下了这个标记，我们还可以自己补充，这个函数的原理如下：
+&emsp;&emsp;UE的RHIcommandlist自带了一个函数FRHICommandListImmediate::SetCurrentStat，可以用来让Render给RHI加一个标记，这个标记就可以认为是Render的某个阶段的名字，UE自带了在Render的很多阶段下了这个标记，我们还可以自己补充，这个函数的原理如下：
 ![StatsTag\label{fig:StatsTag}](StatsTag.png)
 &emsp;&emsp;这个status本身也是以command的形式插入队列，所以每一条RHI执行的cmd会被统计到它之前最近的那个status tag下面，通过不断的细分插入这些tag，我们可以跟踪到RHI的cmd从是在Render的哪个阶段被产生。
 
