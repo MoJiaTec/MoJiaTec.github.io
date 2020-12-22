@@ -29,7 +29,7 @@
 
 ## 1.1 渲染框架
 &emsp;&emsp;从游戏运行层面看，硬件平台的核心资源包括：cpu，gpu，内存、带宽（这里特指soc架构的移动平台的共享显存）。<br>
-&emsp;&emsp;现代硬件平台和图形API，总的趋势是并行渲染。例如，相对于传统图形API，Vulkan一个显著特点就是对多线程友好，如下图：
+&emsp;&emsp;现代硬件平台和图形API，总的趋势是并行渲染。例如，相对于传统图形API，Vulkan一个显著特点就是对多线程友好，下图是Nvidia的关于vulkan多线程的工作原理图：
 ![渲染框架\label{fig:VulkanMultiThread}](VulkanMultiThread.jpg)
 &emsp;&emsp;Unreal Engne(后面简称UE)引擎本身是一个跨平台3D引擎，封装了数种流行图形API，并能运行在不同的硬件平台上。同时，充分采用了并行的优势，实现了一套多线程渲染框架。如下图所示：
 ![UE\label{fig:ue}](ue.png)
@@ -148,12 +148,26 @@ Normal, R、G 通道表示Normal，B通道：AO信息；Alpha通道：第0-6位,
 # 3.输出部分
 &emsp;&emsp;输出部分除了最终将场景内容输出给显示设备的渲染模块，还有用于检测系统运行时指标数据的输出检测模块。我们这里关心的指标数据，通常包括FPS、CPU、GPU、内存、带宽、电量消耗等数据。想要精确的获取这些数据，十分依赖硬件平台自身的驱动特性。实际上在大部分情况下，应用层没有办法简单有效的拿到这些系统内核层面的数据。根据我们设计的系统，可以简化问题需求，我们只需要高效并相对准确的获取FPS、CPU和GPU时间、以及内存和带宽数据。
 ## 3.1 输出检测模块
-&emsp;&emsp;UE本身已经实现了一套性能数据检测机制，可以获取上述数据，具体可以参考UE官方网站的Stats System OverView的内容，这里不做过多阐述。
-&emsp;&emsp;本方案采用UE已有机制，获取FPS、DrawCall、CPU时间、GPU时间和Memory数据，作为运行期的反馈数据，和系统指标模块数据进行对比，作为反馈数据输入给反馈控制模块。
-### 3.1.1
+&emsp;&emsp;UE的Stats系统已经实现了一套性能数据检测机制，可以获取上述数据，具体可以参考UE官方网站的Stats System OverView的内容。本方案采用该机制，获取FPS、DrawCall、CPU时间、GPU时间和Memory数据，作为运行期的反馈数据，和系统指标模块数据进行对比，作为反馈数据输入给反馈控制模块。当然，读者可以根据项目需要，利用和扩展Stats系统，获取Game Thread、Renderer Thread、RHI Thread以及GPU Thread不同阶段下一些具体事件和函数的时间和内存消耗，比如IO加载，计算场景物件可见性，生成GPU Vertex Buffer等，为反馈控制模块提供精细控制策略的数据。
 
-### 3.1.2
+### 3.1.1 Stats系统
+&emsp;&emsp;Stats系统基于埋点的机制，即通过在一段逻辑前后显示的增加标签来录得这段时间这个标签内逻辑的运行时间。
+&emsp;&emsp;Stats系统有很多种类型的stat，测试cpu运行时间的stat叫做cycle stat。具体可分为如下步骤：<br>
+1、每个stat一定存在于一个stat group里，需要通过下面宏先定义一个stat group，
+DECLARE_STAT_GROUP(Description, StatName, StatCategory, InDefaultEnable, InCompileTimeEnable, InSortByName)
+这里的InDefaultEnable表示是否默认开启，默认不开启的话需要在运行时通过 stat group enable StatNamel来动态开启。这个宏会定义一个FStatGroup_StatName的结构体。<br>
+2、定义一个cycle stat，通过宏
+DECLARE_CYCLE_STAT(CounterName,StatId,GroupId)，这里的groupid就是之前定义的group的statname。这个宏其实是调用一个更加通用类型stat的声明 DECLARE_STAT(Description, StatName, GroupName, StatType, bShouldClearEveryFrame, bCycleStat, MemoryRegion)，它会定义一个FStat__ StatId的结构体，并同时声明一个全局的FThreadSafeStaticStat<FStat__ StatId>变量StatPtr_StatId，这个变量有个主要的作用是高效率的通过getstatid（）接口返回某个给定名字的statid的全局唯一的FStat__ StatId实例。<br>
+3、测量，定义好之后可以在一段代码的作用域开始处加入SCOPE_CYCLE_COUNTER(StatId)，它会为当前作用域的前后埋点，这statid会用来统计这个作用域处的cpu时间开销，其实它获取到全局的这个FStat__StatId用其构造了一个FScopeCycleCounter的临时变量，它继承自FCycleCounter，它是个基于scope的变量，在构造的时候会调用FCycleCounter的start，start就会开始设定这个FStat__ StatId的统计，而析构的时候他调用FCycleCounter的stop来停止收集。
 
+### 3.1.2 Stats数据类型
+&emsp;&emsp;Stats系统支持如下数据类型：
+![StatsType\label{fig:StatsType}](StatsType.png)
+
+### 3.1.3 扩展定制Stats系统
+&emsp;&emsp;UE的RHIcommandlist自带了一个函数FRHICommandListImmediate::SetCurrentStat，可以用来让Render给RHI加一个标记，这个标记就可以认为是Render的某个阶段的名字，UE自带了在Render 的很多阶段下了这个标记，我们还可以自己补充，这个函数的原理如下：
+![StatsTag\label{fig:StatsTag}](StatsTag.png)
+&emsp;&emsp;这个status本身也是以command的形式插入队列，所以每一条RHI执行的cmd会被统计到它之前最近的那个status tag下面，通过不断的细分插入这些tag，我们可以跟踪到RHI的cmd从是在Render的哪个阶段被产生。
 
 # 4.反馈控制部分
 &emsp;&emsp;在介绍反馈控制部分的各个模块之前，我们首先明确两个概念：低帧率和卡顿。<br>
@@ -260,4 +274,5 @@ Fast Terrain Rendering Using Geometrical MipMapping<br>
 Real Time 3D Terrain Engines Using C++ And Dx9<br>
 Masked Software Occlusion Culling<br>
 UE4制作多人大地型游戏的优化<br>
+UE高级性能剖析技术<br>
 Vulkan高性能渲染<br>
