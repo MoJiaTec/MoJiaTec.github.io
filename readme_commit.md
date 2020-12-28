@@ -19,8 +19,7 @@
 # 1.概述
 &emsp;&emsp;随着硬件平台和游戏技术的不断进步，呈现到玩家手上的游戏品质也在快速提升，尤其是随着手游市场的崛起，近年来呈现了一批品质拔尖的作品。即便这样，依然无法满足玩家对于3A游戏的期待。3A游戏，大部分都是以大世界的形式来表现游戏内容。即便硬件平台的能力在飞速提升，往往也很难满足大世界场景复杂度的爆发式增长。所以如何控制和调节场景复杂度，在很大程度上决定了场景里填充内容的数量和质量。<br>
 &emsp;&emsp;下图是一个典型的大世界场景，可以清楚看到，其显著的特征有，视野比较宽，视距比较远，地图比较大，植被比较多，还会有比较多的风格变换，导致绘制内容的种类比较多，资源的使用、变化比简单一些的游戏复杂得多。
-![大世界\label{fig:bigWorld}](bigWorld.jpg)
-![大世界](bigWorld.jpg)
+![图 大世界场景示意图\label{fig:bigWorld}](bigWorld.jpg)
 [审稿意见:@keloy week1] --这里需要有图片名称，另外这张图可以用自己项目或者demo的截图，质量选择高一点能代表复杂度较高的场景截图更好--
 <br>
 
@@ -33,9 +32,9 @@
 ## 1.1 渲染框架
 &emsp;&emsp;从游戏运行层面看，硬件平台的核心资源包括：cpu，gpu，内存、带宽（这里特指soc架构的移动平台的共享显存）。<br>
 &emsp;&emsp;现代硬件平台和图形API，总的趋势是并行渲染。例如，相对于传统图形API，Vulkan一个显著特点就是对多线程友好，下图是Nvidia的关于vulkan多线程的工作原理图：
-![渲染框架\label{fig:VulkanMultiThread}](VulkanMultiThread.jpg)
-&emsp;&emsp;Unreal Engne(后面简称UE)引擎本身是一个跨平台3D引擎，封装了数种流行图形API，并能运行在不同的硬件平台上。同时，充分采用了并行的优势，实现了一套多线程渲染框架。如下图所示：
-![UE\label{fig:ue}](ue.png)
+![图 Vulkan多线程渲染框架图\label{fig:VulkanMultiThread}](VulkanMultiThread.jpg)
+&emsp;&emsp;Unreal Engine(后面简称UE)引擎本身是一个跨平台3D引擎，封装了数种流行图形API，并能运行在不同的硬件平台上。同时，充分采用了并行的优势，实现了一套多线程渲染框架。如下图所示：
+![图 UE渲染架构图\label{fig:ue}](ue.png)
 &emsp;&emsp;整个UE引擎的框架，大致可分为：<br>
 game thread,负责游戏逻辑，提交cpu渲染数据。<br>
 renderer thread，负责排序、剔除、生成渲染命令。<br>
@@ -66,6 +65,7 @@ gpu thread，负责执行渲染命令。<br>
 复杂度控制器模块，根据接收到的控制指令，进行相应操作，如加载卸载对象、显示隐藏对象、调节LOD等。<br>
 [审稿意见:@keloy week1]
 --改段内容比较关键，要将各个模块功能以及结合上面提到的4个线程说明重要模块工作在什么线程，时许图的对应关系--
+&emsp;&emsp;根据上文讨论的现代引擎普遍采用的多线程渲染框架结构，我们的复杂度控制系统可以很好的与之适配。首先，由工作在game thread的场景输入模块，负责加载场景对象，并生成渲染数据提交给renderer thread。然后由隶属于renderer thread的场景预处理模块，负责执行数据的可视性检测功能。之后由场景呈现模块，负责渲染命令的生成、提交、执行多个职能，分别工作在renderer thread、rhi thread和GPU thread中。而输出检测模块，跨度最广，负责各个线程以及线程中某些子过程的数据数据检测，并把数据反馈给全局对象反馈控制器模块，它和复杂度控制器模块以及系统指标模块，可以根据实际情况，工作于game thread或者独立的线程，最终把控制指令通过命令的形式由任务系统发送给其他线程，其他线程从任务队列中不断获取命令并执行。
 
 # 2.输入部分
 &emsp;&emsp;场景的复杂度，是场景中所有对象复杂度的总和。关于复杂度的定义，根据之前渲染架构一节对于硬件平台的核心资源分析，我们把对于核心资源消耗的因素，统一称作复杂度要素。为了简化模型和算法原型，我们这里关注的场景对象的复杂度，主要由mesh，纹理，材质等核心要素决定。在确定物件的物理复杂度之后，我们还要根据物件的距离(Distance)、屏幕占比(ScreenSize)、重要程度(根据需要人为定义，比如社交属性等)等因素，并根据预先设计的因子权重系数，计算出对象的评分(Ticket)，这个数据将用于后面控制模块的复杂度控制算法中。<br>
@@ -83,7 +83,7 @@ $$ c_{i} = g(x) $$
 
 ## 2.2 对象评分(Ticket)计算
 [审稿意见:@keloy week1] --场景对象社交属性太生僻，建议用场景对象视觉重要性--
-&emsp;&emsp;在之前的项目优化中，我们通常会在GamePlay层面根据场景对象的社交属性（比如重要性、关注度等）调整对象的LOD、显示或隐藏，在Engine层面又会根据对象的物理属性（比如Distance、ScreenSize）再次调节对象的LOD、显示或隐藏。这种做法因为数据和控制时机的割裂，常常造成很奇怪的bug，或者调节效果不理想。所以，在本方案中，我们会根据预先设定的因子和因子权重，统一计算对象评分。然后存储在一个管理对象评分的全局对象Ticket Manager中，并按大小排序，之后用于复杂度控制器中，智能调节对象LOD，显示隐藏，加载卸载等。<br>
+&emsp;&emsp;通常，我们会在GamePlay层面根据场景对象的视觉重要性（比如重要性、关注度等）调整对象的LOD、显示或隐藏，在Engine层面又会根据对象的物理属性（比如Distance、ScreenSize）再次调节对象的LOD、显示或隐藏。这种做法因为数据和控制时机的割裂，常常造成很奇怪的bug，或者调节效果不理想。所以，在本方案中，我们会根据预先设定的因子和因子权重，统一计算对象评分。然后存储在一个管理对象评分的全局对象Ticket Manager中，并按大小排序，之后用于复杂度控制器中，智能调节对象LOD，显示隐藏，加载卸载等。<br>
 &emsp;&emsp;下图可以直观的理解这个概念：<br>
 ![Bucket1\label{fig:Bucket1}](Bucket1.jpg)
 <br>
@@ -103,55 +103,7 @@ $$ t_{i} = f(x) $$
 ![系统性能指标\label{fig:performance}](performance.png)
 &emsp;&emsp;在制定系统指标的数值时，我们需要根据游戏类型和硬件平台的能力，为不同的FPS数值，设置对应的场景复杂度总量、CPU时间、GPU时间、DrawCall数值和Memory数值。反复调试总结，最终形成一个合理的数值配置文件，作为系统指标模块的输入。在此基础上，反馈控制模块会根据当前的系统指标的预期数值和输出检测反馈数值的差值，以及根据当前场景复杂度，系统会自动选一个合适的FPS数值作为目标，并根据CPU时间、GPU时间、DrawCall数值和Memory数值动态调整场景复杂度，以期在目标FPS上稳定运行游戏。
 [审稿意见:@keloy week1] --读到这里跳变明显，缺少一节内容来阐述大世界场景复杂度的构成要素，这些场景要素如何计算ticket，下面的这些特殊对象的优化手段出现才会顺理成章--
-## 2.5 特殊对象的处理
-&emsp;&emsp;大世界场景，比较典型的场景物件有大面积地形，大规模植被等。这两类对象具有屏幕占比高，实例数量多的特点，是场景复杂度的重要来源。如何处理这两类对象，直接关系到整个场景复杂度的数值。因此，这两类对象是我们需要重点关注的内容。
 
-### 2.5.1 Landscape 
-#### 2.5.1.1 地形系统与地形低模代理方案<br>
-&emsp;&emsp;UE的地形系统，采用的是Geo-Mipmap，他的优点是LOD生成简单，顶点缓冲区、索引缓冲区可以共用等。另外,UE的地形系统，渲染单位是component，并且地表渲染用的是多层layer根据weightmap texture进行混合的方案，为了减少材质复杂度和采样数，UE会为每个component生成一个独立的material instance。基于这些实现和优化，导致了相应的缺点，如component无法合批渲染，使得大地形的DrawCall很高。LOD的区分只和屏幕占比有关，使得无法区分不同地形区域对于地形mesh的细节需求，如山丘和平地有可能使用相同的LOD,要么因为高LOD造成细节丢失，要么因为低LOD造成顶点浪费等。<br>
-&emsp;&emsp;基于上述的分析，在使用ue地形系统来构造大世界，我们选择近处使用地形系统来表现细节，远处使用地形低模代理来表现轮廓的方案。这样可以表现大世界的同时，也极大的降低了复杂度，如DrawCall,材质复杂度等。<br>
-
-&emsp;&emsp;UE原生低模代理的生成,只能指定整个sublevel的网格百分比或者某个特定LOD，然而sublevel通常会包含多个component，每个component代表的地貌需要不同的LOD等级。从而导致，这种代理生成方式，不但会影响美术对于地形的迭代速度，也不能保证视觉效果。因此，我们使用基于误差的分割策略。这样既能保证平地使用较少的顶点数，同时也能保证细节较多的地方(如山丘等)保持较好的细节。
-![分割策略\label{fig:SpiltMethod}](SpiltMethod.png)
-
-公式如下：
-\[Split ?= \frac{ES}{D} > L \]
-\[E = error metric \]
-\[S = error scale \]
-\[D = distance to viewer \]
-\[L = ratio limit \]
-
-#### 2.5.1.2 地形渲染的合批方案<br>
-&emsp;&emsp;虽然地形低模代理方案在一定程度上缓解了DrawCall过高的问题，但同时也会增加Mesh和纹理的使用量，本质上是一种空间换时间的方法。所以根据不同硬件平台的特性，我们需要在地形和低模代理直接取一个合适的边界。所以，我们也需要考虑地形系统自身的合批方案，从而降低地形系统自身的DrawCall消耗。根据上面对于UE地形系统的分析，我们可以使用Virtual Texture,把地形渲染时需要的纹理统一通过VT来存储，因此相同LOD的地形component可以合批渲染。
-&emsp;&emsp;VT是比较成熟的渲染技术，这里不过多阐述，需要注意的是要进行压缩格式的处理，比如ASTC，否则带宽消耗会比较可观，下图是VT原理示意图：
-![vt\label{fig:virtualtexture}](virtualtexture.png)
-
-### 2.5.2 Foliage 
-&emsp;&emsp;UE的植被方案采用的是HISM，内部实现采用K-D Tree来管理实例对象，相对于他的基类ISM，他能够支持分簇LOD实例进行渲染，这个特性使得它比较适合一定范围内植被对象的管理和渲染。但是当范围增大，植被实例增加，HISM导致的CPU、GPU消耗都会极具增加。常用的解决方案是增加植被static mesh的LOD区分力度，也无法很好的缓解这个问题，同时还会引起中远景的植被表现力急剧下降。<br>
-&emsp;&emsp;下图是hism渲染示意图：
-![hism\label{fig:hism}](hism.png)
-<br>
-#### 2.5.2.1 Imposter方案<br>
-&emsp;&emsp;一棵树通常需要几千面组成，一棵树的Impostor只有一个面片，两个三角形组成。Impostor通过对一棵树的多个方向进行拍照，然后根据相机和树的方向，显示对应的纹理图片。Imposter通常会作为一个独立的mesh LOD存在，因为只有一个LOD，所以可以使用ISM存储Imposter植被群，无论在数据结构还是对象复杂度，都比传统的HISM存储的多级LOD Mesh更高效。为了不降低Imposter的表现力，本方案采用的纹理信息和优化点如下:<br>
-1、两张纹理：BaseColor、Normal。<br>
-BaseColor，R、G、B通道表示BaseColor；Alpha通道：第0-6位：深度；第7位：Mask。<br>
-Normal, R、G 通道表示Normal，B通道：AO信息；Alpha通道：第0-6位, 树木的厚度，用来做SSS处理,第7位, 表示树叶和树杆分类。<br>
-2、增强立体感。法线进行球面处理：<br>
-  OriNormal：捕捉拍到的法线。<br>
-  SphereNormal: 球面法线。<br>
-  NewNormal：处理后的法线.<br>
-  NewNormal = lerp(OriNormal, SphereNormal, lerpParam);<br>
-  其中lerpParam参数(0-1)，越小就越靠近原来捕捉的法线，越大就越靠近球面法线。可以通过调lerpParam参数获取想要的效果。<br>
-
-3、SSS效果。烘培Impostor Normal时，多增加一个渲染pass，用来生成树木的厚度图。该厚度信息保存在Normal纹理的Alpha 通道里面。树木的厚度信息用来做SSS的处理：树木的光线透视主要通过厚度来处理，越厚则光线透视越差，相反，越薄则光线投射越强。<br>
-  SSS = SSS * Thickness<br>
-
-下图是实际的Imposter渲染效果<br>
-![植被Imposter\label{fig:imposter}](imposter.png)
-下面是Imposter用到的纹理资源<br>
-![植被ImposterDiffuse\label{fig:ImposterDiffuse_s}](ImposterDiffuse_s.png)
-![植被ImposterNormal\label{fig:ImposterNormal_s}](ImposterNormal_s.png)
-![植被ImposterSSS\label{fig:ImposterSSS_s}](ImposterSSS_s.png)
 
 # 3.输出部分
 &emsp;&emsp;输出部分除了最终将场景内容输出给显示设备的渲染模块，还有用于检测系统运行时指标数据的输出检测模块。我们这里关心的指标数据，通常包括FPS、CPU、GPU、内存、带宽、电量消耗等数据。想要精确的获取这些数据，十分依赖硬件平台自身的驱动特性。实际上在大部分情况下，应用层没有办法简单有效的拿到这些系统内核层面的数据。根据我们设计的系统，可以简化问题需求，我们只需要高效并相对准确的获取FPS、CPU和GPU时间、以及内存和带宽数据。
@@ -267,11 +219,61 @@ class FPerformanceController
 };
 ~~~
 
-## 4.5 测试数据
-![ProfileData\label{fig:ProfileData}](ProfileData.png)
-&emsp;&emsp;上图的测试数据基于项目的实际大世界场景，12x12公里大地形，有人工建筑区域，也有户外密集的植被区域。通过测试数据可以看出，游戏在运行过程中除了几个轻微的卡顿点之外，整个fps平滑的控制在某个设定值。这几个卡顿点主要发生在地形的sublevel加载和远处的植被区域加载。如何解决加载大块资源或者如何组织场景资源来避免卡顿问题，这是我们下一步需要优化的工作。
+# 5.特殊场景对象的处理
+&emsp;&emsp;以上基本介绍完场景复杂度控制方案，其中关于复杂度的控制指令都是针对一般性场景对象。本节针对特殊的大世界场景对象进行单独和重点阐述。众所周知，对于大世界场景，比较典型的场景对象有大面积地形，大规模植被等。这两类对象具有屏幕占比高，实例数量多的特点，是场景复杂度的重要来源。如何处理这两类对象，直接关系到整个场景复杂度的数量级。因此，这两类对象是我们需要重点关注的内容。下面关于他们的优化处理方法，可以理解为，在使用复杂度较低的LOD和DrawCall的同时，保证了较好的渲染效果。因此，对于这些特殊对象的处理方法，可以无缝集成到我们方案中的复杂度控制模块的控制指令中。
 
-# 5.总结
+### 2.5.1 Landscape 
+#### 2.5.1.1 地形系统与地形低模代理方案<br>
+&emsp;&emsp;UE的地形系统，采用的是Geo-Mipmap，他的优点是LOD生成简单，顶点缓冲区、索引缓冲区可以共用等。另外,UE的地形系统，渲染单位是component，并且地表渲染用的是多层layer根据weightmap texture进行混合的方案，为了减少材质复杂度和采样数，UE会为每个component生成一个独立的material instance。基于这些实现和优化，导致了相应的缺点，如component无法合批渲染，使得大地形的DrawCall很高。LOD的区分只和屏幕占比有关，使得无法区分不同地形区域对于地形mesh的细节需求，如山丘和平地有可能使用相同的LOD,要么因为高LOD造成细节丢失，要么因为低LOD造成顶点浪费等。<br>
+&emsp;&emsp;基于上述的分析，在使用ue地形系统来构造大世界，我们选择近处使用地形系统来表现细节，远处使用地形低模代理来表现轮廓的方案。这样可以表现大世界的同时，也极大的降低了复杂度，如DrawCall,材质复杂度等。<br>
+
+&emsp;&emsp;UE原生低模代理的生成,只能指定整个sublevel的网格百分比或者某个特定LOD，然而sublevel通常会包含多个component，每个component代表的地貌需要不同的LOD等级。从而导致，这种代理生成方式，不但会影响美术对于地形的迭代速度，也不能保证视觉效果。因此，我们使用基于误差的分割策略。这样既能保证平地使用较少的顶点数，同时也能保证细节较多的地方(如山丘等)保持较好的细节。
+![分割策略\label{fig:SpiltMethod}](SpiltMethod.png)
+
+公式如下：
+\[Split ?= \frac{ES}{D} > L \]
+\[E = error metric \]
+\[S = error scale \]
+\[D = distance to viewer \]
+\[L = ratio limit \]
+
+#### 2.5.1.2 地形渲染的合批方案<br>
+&emsp;&emsp;虽然地形低模代理方案在一定程度上缓解了DrawCall过高的问题，但同时也会增加Mesh和纹理的使用量，本质上是一种空间换时间的方法。所以根据不同硬件平台的特性，我们需要在地形和低模代理直接取一个合适的边界。所以，我们也需要考虑地形系统自身的合批方案，从而降低地形系统自身的DrawCall消耗。根据上面对于UE地形系统的分析，我们可以使用Virtual Texture,把地形渲染时需要的纹理统一通过VT来存储，因此相同LOD的地形component可以合批渲染。
+&emsp;&emsp;VT是比较成熟的渲染技术，这里不过多阐述，需要注意的是要进行压缩格式的处理，比如ASTC，否则带宽消耗会比较可观，下图是VT原理示意图：
+![vt\label{fig:virtualtexture}](virtualtexture.png)
+
+### 2.5.2 Foliage 
+&emsp;&emsp;UE的植被方案采用的是HISM，内部实现采用K-D Tree来管理实例对象，相对于他的基类ISM，他能够支持分簇LOD实例进行渲染，这个特性使得它比较适合一定范围内植被对象的管理和渲染。但是当范围增大，植被实例增加，HISM导致的CPU、GPU消耗都会极具增加。常用的解决方案是增加植被static mesh的LOD区分力度，也无法很好的缓解这个问题，同时还会引起中远景的植被表现力急剧下降。<br>
+&emsp;&emsp;下图是hism渲染示意图：
+![hism\label{fig:hism}](hism.png)
+<br>
+#### 2.5.2.1 Imposter方案<br>
+&emsp;&emsp;一棵树通常需要几千面组成，一棵树的Impostor只有一个面片，两个三角形组成。Impostor通过对一棵树的多个方向进行拍照，然后根据相机和树的方向，显示对应的纹理图片。Imposter通常会作为一个独立的mesh LOD存在，因为只有一个LOD，所以可以使用ISM存储Imposter植被群，无论在数据结构还是对象复杂度，都比传统的HISM存储的多级LOD Mesh更高效。为了不降低Imposter的表现力，本方案采用的纹理信息和优化点如下:<br>
+1、两张纹理：BaseColor、Normal。<br>
+BaseColor，R、G、B通道表示BaseColor；Alpha通道：第0-6位：深度；第7位：Mask。<br>
+Normal, R、G 通道表示Normal，B通道：AO信息；Alpha通道：第0-6位, 树木的厚度，用来做SSS处理,第7位, 表示树叶和树杆分类。<br>
+2、增强立体感。法线进行球面处理：<br>
+  OriNormal：捕捉拍到的法线。<br>
+  SphereNormal: 球面法线。<br>
+  NewNormal：处理后的法线.<br>
+  NewNormal = lerp(OriNormal, SphereNormal, lerpParam);<br>
+  其中lerpParam参数(0-1)，越小就越靠近原来捕捉的法线，越大就越靠近球面法线。可以通过调lerpParam参数获取想要的效果。<br>
+
+3、SSS效果。烘培Impostor Normal时，多增加一个渲染pass，用来生成树木的厚度图。该厚度信息保存在Normal纹理的Alpha 通道里面。树木的厚度信息用来做SSS的处理：树木的光线透视主要通过厚度来处理，越厚则光线透视越差，相反，越薄则光线投射越强。<br>
+  SSS = SSS * Thickness<br>
+
+下图是实际的Imposter渲染效果<br>
+![植被Imposter\label{fig:imposter}](imposter.png)
+下面是Imposter用到的纹理资源<br>
+![植被ImposterDiffuse\label{fig:ImposterDiffuse_s}](ImposterDiffuse_s.png)
+![植被ImposterNormal\label{fig:ImposterNormal_s}](ImposterNormal_s.png)
+![植被ImposterSSS\label{fig:ImposterSSS_s}](ImposterSSS_s.png)
+
+# 6.测试数据
+&emsp;&emsp;下图是基于实际项目的大世界场景的测试数据，12x12公里大地形，有人工建筑区域，也有户外密集的植被区域。通过测试数据可以看出，游戏在运行过程中除了几个轻微的卡顿点之外，整个fps平滑的控制在某个设定值。这几个卡顿点主要发生在地形的sublevel加载和远处的植被区域加载。如何解决加载大块资源或者如何组织场景资源来避免卡顿问题，这是我们下一步需要优化的工作。
+![ProfileData\label{fig:ProfileData}](ProfileData.png)
+
+# 7.总结
 &emsp;&emsp;本文分析了大世界场景的典型特征，并在介绍现代硬件平台的核心资源和渲染架构的基础上，给出了复杂度的定义。结合工业控制中的负反馈控制理论和游戏运行的目标需求，提出了大世界的场景复杂度控制方案，主要原理是根据反馈的系统指标数据和期望的系统指标数据之间的差异，以及预先制定的控制策略，得到相应的控制指令，最终达到智能控制场景内容的加载卸载、显示隐藏、LOD控制的目标以及平滑的游戏运行体验。<br>
 &emsp;&emsp;读者可在此基础上，根据项目的需求以及发布平台，合理定制系统指标模块、预处理模块、反馈控制器模块和复杂度控制模块。
 
