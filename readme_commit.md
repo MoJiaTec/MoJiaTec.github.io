@@ -50,6 +50,7 @@ gpu thread，负责执行渲染命令。<br>
 [审稿意见:@keloy week1] --系统框架的描述不够清晰，建议自描述类型的用语--<br>
 &emsp;&emsp;在自动控制理论中，有两种常用的控制系统模型：正反馈和负反馈。正反馈，反馈信号与输入信号同向，用于增强输出与输入的偏差；负反馈，反馈信号与输入信号反向，用于抑制输出与输入的偏差。在实际应用中，负反馈系统通常用于搭建稳定闭环的自动控制系统。一个典型的负反馈控制系统如下图：<br>
 ![图 负反馈控制系统\label{fig:ControlSystem}](ControlSystem.png)
+&emsp;&emsp;其中R(S)为输入信号，C(S)为输出信号，B(S)为反馈信号，E(S)为误差信号，G(S)为前向通道传递函数，H(S)为反馈通道传递函数。
 &emsp;&emsp;结合我们方案的目标，即在任意平台任意场景下，根据系统的输入和期望输出，自动调节输入内容，达到稳定的FPS输出，我们设计出如下的基于负反馈模型的场景复杂度控制系统：
 ![场景复杂度控制系统\label{fig:SceneManagement}](SceneManagement.png)
 &emsp;&emsp;整个系统分为三个部分：<br>
@@ -101,7 +102,7 @@ $$ t_{i} = f(x) $$
 ## 2.4 系统指标制定
 &emsp;&emsp;我们在开发游戏时，会经常问自己，我的游戏需要占用多少cpu、内存，需要多少帧率(FPS)。总体来说，cpu、内存占用越少越好，FPS越高越好。但又是相对的，比如FPS越高，游戏体验会更加流畅，但也意味着消耗资源更多，电量消耗更快。根据2019年中国移动游戏质量白皮书给出的建议，有如下的参考数据：
 ![系统性能指标\label{fig:performance}](performance.png)
-&emsp;&emsp;在制定系统指标的数值时，我们需要根据游戏类型和硬件平台的能力，为不同的FPS数值，设置对应的场景复杂度总量、CPU时间、GPU时间、DrawCall数值和Memory数值。反复调试总结，最终形成一个合理的数值配置文件，作为系统指标模块的输入。在此基础上，反馈控制模块会根据当前的系统指标的预期数值和输出检测反馈数值的差值，以及根据当前场景复杂度，系统会自动选一个合适的FPS数值作为目标，并根据CPU时间、GPU时间、DrawCall数值和Memory数值动态调整场景复杂度，以期在目标FPS上稳定运行游戏。
+&emsp;&emsp;在制定系统指标的数值时，我们需要根据游戏类型和硬件平台的能力，为不同的FPS数值，设置对应的场景复杂度总量、CPU时间、GPU时间、DrawCall数值和Memory数值。反复调试总结，最终形成一个合理的数值配置文件，作为系统指标模块的输入。在此基础上，反馈控制模块会根据当前的系统指标的预期数值和输出检测反馈数值的差值，以及根据当前场景复杂度，系统会自动选一个合适的FPS数值作为目标，并根据CPU时间、GPU时间、DrawCall数值和Memory数值动态调整场景复杂度，以期在目标FPS上稳定运行游戏。<br>
 [审稿意见:@keloy week1] --读到这里跳变明显，缺少一节内容来阐述大世界场景复杂度的构成要素，这些场景要素如何计算ticket，下面的这些特殊对象的优化手段出现才会顺理成章--
 
 
@@ -242,20 +243,21 @@ class FPerformanceController
 \[L = ratio limit \]
 
 #### 2.5.1.2 地形渲染的合批方案<br>
-&emsp;&emsp;虽然地形低模代理方案在一定程度上缓解了DrawCall过高的问题，但同时也会增加Mesh和纹理的使用量，本质上是一种空间换时间的方法。所以根据不同硬件平台的特性，我们需要在地形和低模代理直接取一个合适的边界。所以，我们也需要考虑地形系统自身的合批方案，从而降低地形系统自身的DrawCall消耗。根据上面对于UE地形系统的分析，我们可以使用Virtual Texture,把地形渲染时需要的纹理统一通过VT来存储，因此相同LOD的地形component可以合批渲染。
+&emsp;&emsp;虽然地形低模代理方案在一定程度上缓解了DrawCall过高的问题，但同时也会增加Mesh和纹理的使用量，本质上是一种空间换时间的方法。所以根据不同硬件平台的特性，我们需要在地形和低模代理直接取一个合适的边界。所以，我们也需要考虑地形系统自身的合批方案，从而降低地形系统自身的DrawCall消耗。根据上面对于UE地形系统的分析，我们可以使用Virtual Texture,把地形渲染时需要的纹理统一通过VT来存储，因此相同LOD的地形component可以合批渲染。<br>
 &emsp;&emsp;VT是比较成熟的渲染技术，这里不过多阐述，需要注意的是要进行压缩格式的处理，比如ASTC，否则带宽消耗会比较可观，下图是VT原理示意图：
 ![vt\label{fig:virtualtexture}](virtualtexture.png)
 
 ### 2.5.2 Foliage 
-&emsp;&emsp;UE的植被方案采用的是HISM，内部实现采用K-D Tree来管理实例对象，相对于他的基类ISM，他能够支持分簇LOD实例进行渲染，这个特性使得它比较适合一定范围内植被对象的管理和渲染。但是当范围增大，植被实例增加，HISM导致的CPU、GPU消耗都会极具增加。常用的解决方案是增加植被static mesh的LOD区分力度，也无法很好的缓解这个问题，同时还会引起中远景的植被表现力急剧下降。<br>
-&emsp;&emsp;下图是hism渲染示意图：
+&emsp;&emsp;UE的植被方案采用的是HISM(HierarchicalInstancedStaticMeshComponent)，内部实现采用K-D Tree来管理实例对象，相对于他的基类ISM(InstancedStaticMeshComponent)，他能够支持分簇LOD实例进行渲染，这个特性使得它比较适合一定范围内植被对象的管理和渲染。但是当范围增大，植被实例增加，HISM导致的CPU、GPU消耗都会急剧增加。常用的解决方案是增加植被static mesh的LOD区分力度，但也无法很好的缓解这个问题，同时还会引起中远景的植被表现力急剧下降。<br>
+&emsp;&emsp;下图是HISM渲染示意图：
 ![hism\label{fig:hism}](hism.png)
 <br>
 #### 2.5.2.1 Imposter方案<br>
-&emsp;&emsp;一棵树通常需要几千面组成，一棵树的Impostor只有一个面片，两个三角形组成。Impostor通过对一棵树的多个方向进行拍照，然后根据相机和树的方向，显示对应的纹理图片。Imposter通常会作为一个独立的mesh LOD存在，因为只有一个LOD，所以可以使用ISM存储Imposter植被群，无论在数据结构还是对象复杂度，都比传统的HISM存储的多级LOD Mesh更高效。为了不降低Imposter的表现力，本方案采用的纹理信息和优化点如下:<br>
-1、两张纹理：BaseColor、Normal。<br>
-BaseColor，R、G、B通道表示BaseColor；Alpha通道：第0-6位：深度；第7位：Mask。<br>
-Normal, R、G 通道表示Normal，B通道：AO信息；Alpha通道：第0-6位, 树木的厚度，用来做SSS处理,第7位, 表示树叶和树杆分类。<br>
+&emsp;&emsp;一棵树的网格模型通常高达几千面，一棵树的Impostor只需要两个三角形组成。Impostor通过对一棵树的多个方向进行拍照，然后根据相机和树的方向，显示对应的纹理图片。Imposter通常会作为一个独立的mesh LOD存在，因为只有一个LOD，所以可以使用ISM存储Imposter植被群，无论在数据结构还是对象复杂度，都比传统的HISM存储的多级LOD Mesh更高效。为了不降低Imposter的表现力，本方案采用的纹理信息和优化点如下:<br>
+1、纹理数据：<br>
+BaseColor，RGB通道存储Albedo信息；Alpha通道存储深度和Mask信息。<br>
+Normal, RG存储Normal；B通道存储AO信息；Alpha通道存储植被的厚度和类别信息，可以用于SSS(subsurface scattering)效果。<br>
+
 2、增强立体感。法线进行球面处理：<br>
   OriNormal：捕捉拍到的法线。<br>
   SphereNormal: 球面法线。<br>
@@ -263,7 +265,7 @@ Normal, R、G 通道表示Normal，B通道：AO信息；Alpha通道：第0-6位,
   NewNormal = lerp(OriNormal, SphereNormal, lerpParam);<br>
   其中lerpParam参数(0-1)，越小就越靠近原来捕捉的法线，越大就越靠近球面法线。可以通过调lerpParam参数获取想要的效果。<br>
 
-3、SSS效果。烘培Impostor Normal时，多增加一个渲染pass，用来生成树木的厚度图。该厚度信息保存在Normal纹理的Alpha 通道里面。树木的厚度信息用来做SSS的处理：树木的光线透视主要通过厚度来处理，越厚则光线透视越差，相反，越薄则光线投射越强。<br>
+3、SSS(subsurface scattering)效果。烘培Impostor Normal时，多增加一个渲染pass，用来生成树木的厚度图。该厚度信息保存在Normal纹理的Alpha 通道里面。树木的厚度信息用来做SSS的处理：树木的光线透视主要通过厚度来处理，越厚则光线透视越差，相反，越薄则光线投射越强。<br>
   SSS = SSS * Thickness<br>
 
 下图是实际的Imposter渲染效果<br>
