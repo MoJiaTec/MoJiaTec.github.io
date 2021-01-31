@@ -99,7 +99,7 @@ $$ t_{i} = f(x) $$
 ## 2.3 大世界构成与Bucket分配
 &emsp;&emsp;一个典型的大世界场景，通常由地形、植被、建筑、物件、角色、特效等元素构成。
 &emsp;&emsp;根据硬件平台的能力，我们会制定出不同的预算配置，即Bucket的概念，他指的是为不同重要等级的对象预先分配一个LOD段，根据对象评分，将对象动态移动到某个LOD端。Bucket分配策略需要根据不同的硬件平台能力和当前选取的资源消耗等级进行合理定制。比如性能较差的移动平台，除了自身控制的角色给的Bucket比较高，剩下的角色的都比较低。下图是一个Bucket分配策略示意图：
-![Bucket1\label{fig:bucket1}](bucket1.png)
+![Bucket1\label{fig:bucket}](bucket.png)
 ![Bucket2\label{fig:bucket2}](bucket2.png)
 
 ## 2.4 系统指标制定
