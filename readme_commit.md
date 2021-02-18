@@ -12,16 +12,11 @@
 &emsp;&emsp;整个系统，最终可以达成如下几个目标：<br>
 1、运行时根据平台设定，智能控制场景内容的加载卸载、显示隐藏、LOD控制等。<br>
 2、根据平台负载能力和当前负荷，更有效的控制运行负荷，获取平滑的fps。<br>
-<br>
-[审稿意见:@keloy week1]<br>
---建议在背景描述中将该篇文章适应的范围说明下，对于移动端的功耗发热特殊说明，该篇文章是多种平台都适用的，另外后面多处提到的据之前的项目经验其实没有必要--
 
 # 1.概述
 &emsp;&emsp;随着硬件平台和游戏技术的不断进步，呈现到玩家手上的游戏品质也在快速提升，尤其是随着手游市场的崛起，近年来呈现了一批品质拔尖的作品。即便这样，依然无法满足玩家对于3A游戏的期待。3A游戏，大部分都是以大世界的形式来表现游戏内容。虽然硬件平台的能力在飞速提升，往往也很难满足大世界场景复杂度的爆发式增长。所以如何控制和调节场景复杂度，在很大程度上决定了场景里填充内容的数量和质量。<br>
 &emsp;&emsp;下图是一个典型的大世界场景，可以清楚看到，其显著的特征有，视野宽，视距远，地图大，植被多，风格特征变化快，从而导致绘制内容的种类比较多，资源的使用比传统小场景游戏要更为复杂。
 ![图 大世界场景示意图\label{fig:bigWorld}](bigWorld.jpg)
-[审稿意见:@keloy week1] <br>--这里需要有图片名称，另外这张图可以用自己项目或者demo的截图，质量选择高一点能代表复杂度较高的场景截图更好--
-<br>
 
 &emsp;&emsp;为简化我们的算法模型、以及篇幅限制等原因，文中并不会考虑渲染管线、光照、后处理等一些高级渲染话题，因为这些技术的使用，大多都可以根据硬件平台能力和玩家喜好，通过渲染选项进行静态配置。所以文中关于复杂度和控制算法的讨论，都是基于简化后的基础模型特性进行阐述和讨论。<br>
 &emsp;&emsp;场景复杂度，从广义上讲，就是由场景对象的数量和内容细节决定。具体来讲，每个对象的内容通常包括网格(Mesh)，纹理，材质等核心要素。<br>
@@ -47,7 +42,6 @@ gpu thread，负责执行渲染命令。<br>
 
 
 ## 1.2 系统框架
-[审稿意见:@keloy week1] --系统框架的描述不够清晰，建议自描述类型的用语--<br>
 &emsp;&emsp;在自动控制理论中，有两种常用的控制系统模型：正反馈和负反馈。正反馈，反馈信号与输入信号同向，用于增强输出与输入的偏差；负反馈，反馈信号与输入信号反向，用于抑制输出与输入的偏差。在实际应用中，负反馈系统通常用于搭建稳定闭环的自动控制系统。一个典型的负反馈控制系统如下图：<br>
 ![图 负反馈控制系统\label{fig:ControlSystem}](ControlSystem.png)
 &emsp;&emsp;其中R(S)为输入信号，C(S)为输出信号，B(S)为反馈信号，E(S)为误差信号，G(S)为前向通道传递函数，H(S)为反馈通道传递函数。<br>
@@ -64,8 +58,6 @@ gpu thread，负责执行渲染命令。<br>
 场景预处理模块，主要指对于场景对象的预处理，用于场景复杂度降维，把全场景复杂度降至当前视野复杂度，主要是指Visibility检测算法。<br>
 反馈控制器模块，主要用于根据反馈的系统指标数据和期望的系统指标数据之间的差异，根据一定的策略发送控制指令到复杂度控制模块。<br>
 复杂度控制器模块，根据接收到的控制指令，进行相应操作，如加载卸载对象、显示隐藏对象、调节LOD等。<br>
-[审稿意见:@keloy week1]<br>
---改段内容比较关键，要将各个模块功能以及结合上面提到的4个线程说明重要模块工作在什么线程，时许图的对应关系--<br>
 &emsp;&emsp;根据上文讨论的现代引擎普遍采用的多线程渲染框架结构，我们的复杂度控制系统可以很好的与之适配。首先，由工作在game thread的场景输入模块，负责加载场景对象，并生成渲染数据提交给renderer thread。然后由隶属于renderer thread的场景预处理模块，负责执行数据的可视性检测功能。之后由场景呈现模块，负责渲染命令的生成、提交、执行多个职能，分别工作在renderer thread、rhi thread和GPU thread中。而输出检测模块，跨度最广，负责各个线程以及线程中某些子过程的数据数据检测，并把数据反馈给全局对象反馈控制器模块，它和复杂度控制器模块以及系统指标模块，可以根据实际情况，工作于game thread或者独立的线程，最终把控制指令通过命令的形式由任务系统发送给其他线程，其他线程从任务队列中不断获取命令并执行。
 
 # 2.输入部分
@@ -77,20 +69,17 @@ Mesh，主要影响加载时长，内存占用，带宽消耗，以及GPU的ALU�
 纹理，主要影响带宽。<br>
 材质，主要影响GPU消耗。<br>
 &emsp;&emsp;这三个要素与之对应的复杂度，我们设定为：DrawCall，内存，带宽，材质复杂度。对于多级LOD Mesh，我们都会赋予每级LOD独立的Mesh、纹理和材质，针对每级LOD计算一个复杂度。计算公式如下：<br>
-[审稿意见:@keloy] --公式编写不标准--<br>
 $$ c = \Sigma\sigma_{i} c_{i} $$
 $$ c_{i} = g(x) $$
 &emsp;&emsp;其中c为总的复杂度，$ c_{i} $为某个复杂度因子算出的复杂度，$ g(x) $为某个复杂度因子的评估函数，$ sigma_{i} $为某个复杂度因子的权重系数，不同因子的权重系数可以根据硬件平台进行定制。我们这里选择把不同因子的复杂度整合为一个总的数值，是为了方便计算后面的对象评分；另外也需要把每项复杂度单独存储，用于后面讲到的实际复杂度控制环节。<br>
 &emsp;&emsp;对象复杂度的基础数据在烘焙特定平台资源的时候可以得到，如果需要精确的控制，则需要运行时动态更新具体数据，比如使用HLOD(静态合批)和屏幕占比的变化，会影响到这些数据。<br>
 
 ## 2.2 对象评分(Ticket)计算
-[审稿意见:@keloy week1] --场景对象社交属性太生僻，建议用场景对象视觉重要性--<br>
 &emsp;&emsp;通常，我们会在GamePlay层面根据场景对象的视觉重要性（比如类别、重要性等）调整对象的LOD、显示或隐藏，在Engine层面又会根据对象的物理属性（比如Distance、ScreenSize）再次调节对象的LOD、显示或隐藏。这种做法因为数据和控制时机的割裂，常常造成很奇怪的bug，或者调节效果不理想。所以，在本方案中，我们会根据预先设定的因子和因子权重，统一计算对象评分。然后存储在一个管理对象评分的全局对象Ticket Manager中，并按大小排序，之后用于复杂度控制器中，智能调节对象LOD，显示隐藏，加载卸载等。<br>
 &emsp;&emsp;下图可以直观的理解这个概念：<br>
 ![Bucket1\label{fig:Bucket1}](Bucket1.jpg)
 <br>
 &emsp;&emsp;本方案的对象评分计算公式如下：<br>
-[审稿意见:@keloy week1] --公式问题--<br>
 $$ T = \Sigma\omega_{i} t_{i} $$
 $$ t_{i} = f(x) $$
 &emsp;&emsp;其中T为对象总的评分，$ t_{i} $为某个因子算出的评分，$ f(x) $为某个因子的评估函数，$ omega_{i} $为某个因子的权重系数。在计算复杂度的评估函数中，我们引入了ScreenSize变量，因为这个变量对于材质复杂度的影响比较大。<br>
@@ -102,8 +91,6 @@ $$ t_{i} = f(x) $$
 &emsp;&emsp;为了在游戏运行期更好的控制每种类别对象实际所消耗的复杂度，我们为每个类别的对象再单独制定一个LOD Bucket，即根据对象评分(Ticket)，为不同重要等级的对象预先分配一个LOD段。比如性能较差的移动平台，除了自身控制的角色给的Bucket比较高，剩下的角色的都比较低。下图是一个Bucket分配策略示意图：
 ![Bucket2\label{fig:bucket2}](bucket2.png)
 &emsp;&emsp;无论是类别Bucket，还是LOD Bucket，他们的分配策略需要根据不同的硬件平台能力和实际场景需要进行合理定制。比如在野外漫游时，我们会为地形和植被分配较多Bucket；在多人战斗场景，我们会为角色和特效分配较多Bucket。
-
-[审稿意见:@keloy week1] --读到这里跳变明显，缺少一节内容来阐述大世界场景复杂度的构成要素，这些场景要素如何计算ticket，下面的这些特殊对象的优化手段出现才会顺理成章--
 
 ## 2.4 特殊场景对象的处理
 &emsp;&emsp;本节针对特殊的大世界场景对象进行单独和重点阐述。众所周知，对于大世界场景，比较典型的场景对象有大面积地形，大规模植被等。这两类对象具有屏幕占比高，实例数量多的特点，是场景复杂度的重要来源。如何处理这两类对象，直接关系到整个场景复杂度的数量级。根据这两类对象的特点，即屏幕占比高、实例数量多，优化手段可以从降低对象管理消耗、DrawCall消耗、材质复杂度消耗等方面入手，在降低原始复杂度的同时，保证较好的渲染效果。
@@ -134,7 +121,7 @@ $$ t_{i} = f(x) $$
 ![hism\label{fig:hism}](hism.png)
 <br>
 #### 2.4.2.1 Imposter方案<br>
-&emsp;&emsp;一棵树的网格模型通常高达几千面，一棵树的Impostor只需要两个三角形组成。Impostor通过对一棵树的多个方向进行拍照，然后根据相机和树的方向，显示对应的纹理图片。Imposter通常会作为一个独立的mesh LOD存在，因为只有一个LOD，所以可以使用ISM存储Imposter植被群，无论在数据结构还是对象复杂度，都比传统的HISM存储的多级LOD Mesh更高效。为了不降低Imposter的表现力，本方案采用的纹理信息和优化点如下:<br>
+&emsp;&emsp;Imposter是常用的远景植被渲染方案，原理是离线对一棵树的多个方向进行拍照，然后运行期根据相机和树的相对位置，在一个四边形面片显示对应的纹理来渲染一颗树，相比于数千面的网格模型，复杂度低很多。另外，Imposter通常会作为一个独立的mesh LOD存在，因为只有一个LOD，所以可以使用ISM存储植被群，在数据结构上，比HISM存储的多级LOD Mesh更高效。同时，为克服传统的Imposter方案缺乏光照方面的表现力的缺陷，本方案做了如下优化:<br>
 1、纹理数据：<br>
 BaseColor，RGB通道存储Albedo信息；Alpha通道存储深度和Mask信息。<br>
 Normal, RG存储Normal；B通道存储AO信息；Alpha通道存储植被的厚度和类别信息，可以用于SSS(subsurface scattering)效果。<br>
@@ -143,11 +130,12 @@ Normal, RG存储Normal；B通道存储AO信息；Alpha通道存储植被的厚�
   OriNormal：捕捉拍到的法线。<br>
   SphereNormal: 球面法线。<br>
   NewNormal：处理后的法线.<br>
-  NewNormal = lerp(OriNormal, SphereNormal, lerpParam);<br>
+  处理公式如下：
+  \[NewNormal = lerp(OriNormal, SphereNormal, lerpParam)\]
   其中lerpParam参数(0-1)，越小就越靠近原来捕捉的法线，越大就越靠近球面法线。可以通过调lerpParam参数获取想要的效果。<br>
 
-3、SSS(subsurface scattering)效果。烘培Impostor Normal时，多增加一个渲染pass，用来生成树木的厚度图。该厚度信息保存在Normal纹理的Alpha 通道里面。树木的厚度信息用来做SSS的处理：树木的光线透视主要通过厚度来处理，越厚则光线透视越差，相反，越薄则光线投射越强。<br>
-  SSS = SSS * Thickness<br>
+3、SSS(subsurface scattering)效果。烘培Impostor Normal时，多增加一个渲染pass，用来生成树木的厚度图。该厚度信息保存在Normal纹理的Alpha 通道里面。树木的厚度信息用来做SSS的处理：树木的光线透视主要通过厚度来体现，越厚则光线透视越差，相反，越薄则光线投射越强。计算公式如下：
+  \[SSS = SSS * Thickness\]
 
 下图是实际的Imposter渲染效果<br>
 ![植被Imposter\label{fig:imposter}](imposter.png)
@@ -164,34 +152,29 @@ Normal, RG存储Normal；B通道存储AO信息；Alpha通道存储植被的厚�
 # 3.输出部分
 &emsp;&emsp;输出部分除了最终将场景内容输出给显示设备的渲染模块，还有用于检测系统运行时指标数据的输出检测模块。我们这里关心的指标数据，通常包括FPS、CPU、GPU、内存、带宽、电量消耗等数据。想要精确的获取这些数据，十分依赖硬件平台自身的驱动特性。实际上在大部分情况下，应用层没有办法简单有效的拿到这些系统内核层面的数据。根据我们设计的系统，可以简化问题需求，我们只需要高效并相对准确的获取FPS、CPU和GPU时间、以及内存和带宽数据。
 ## 3.1 输出检测模块
-&emsp;&emsp;UE的Stats系统已经实现了一套性能数据检测机制，可以获取上述数据，具体可以参考UE官方网站的Stats System OverView的内容。本方案采用该机制，获取FPS、DrawCall、CPU时间、GPU时间和Memory数据，作为运行期的反馈数据，和系统指标模块数据进行对比，作为反馈数据输入给反馈控制模块。当然，读者可以根据项目需要，利用和扩展Stats系统，获取Game Thread、Renderer Thread、RHI Thread以及GPU Thread不同阶段下一些具体事件和函数的时间和内存消耗，比如IO加载，计算场景物件可见性，生成GPU Vertex Buffer等，为反馈控制模块提供精细控制策略的数据。
+&emsp;&emsp;UE的Stats系统已经实现了一套性能数据检测机制，可以获取上述数据，具体可以参考UE官方网站的Stats System OverView的内容。本方案采用该机制，获取FPS、DrawCall、CPU时间、GPU时间和Memory数据，作为运行期的反馈数据，和系统指标模块数据进行对比，得到反馈数据输入给反馈控制模块。当然，读者可以根据项目需要，利用和扩展Stats系统，获取Game Thread、Renderer Thread、RHI Thread以及GPU Thread不同阶段下一些具体事件和函数的时间和内存消耗，比如IO加载，计算场景物件可见性，生成GPU Vertex Buffer等，为反馈控制模块提供精细控制策略的数据。
 
 ### 3.1.1 Stats系统
-&emsp;&emsp;Stats系统基于埋点的机制，即通过在一段逻辑前后显示的增加标签来录得这段时间这个标签内逻辑的运行时间。
-&emsp;&emsp;Stats系统有很多种类型的stat，测试cpu运行时间的stat叫做cycle stat。具体可分为如下步骤：<br>
-1、每个stat一定存在于一个stat group里，需要通过下面宏先定义一个stat group，
-DECLARE_STAT_GROUP(Description, StatName, StatCategory, InDefaultEnable, InCompileTimeEnable, InSortByName)
-这里的InDefaultEnable表示是否默认开启，默认不开启的话需要在运行时通过 stat group enable StatNamel来动态开启。这个宏会定义一个FStatGroup_StatName的结构体。<br>
-2、定义一个cycle stat，通过宏
-DECLARE_CYCLE_STAT(CounterName,StatId,GroupId)，这里的groupid就是之前定义的group的statname。这个宏其实是调用一个更加通用类型stat的声明 DECLARE_STAT(Description, StatName, GroupName, StatType, bShouldClearEveryFrame, bCycleStat, MemoryRegion)，它会定义一个FStat__ StatId的结构体，并同时声明一个全局的FThreadSafeStaticStat<FStat__ StatId>变量StatPtr_StatId，这个变量有个主要的作用是高效率的通过getstatid（）接口返回某个给定名字的statid的全局唯一的FStat__ StatId实例。<br>
-3、测量，定义好之后可以在一段代码的作用域开始处加入SCOPE_CYCLE_COUNTER(StatId)，它会为当前作用域的前后埋点，这statid会用来统计这个作用域处的cpu时间开销，其实它获取到全局的这个FStat__StatId用其构造了一个FScopeCycleCounter的临时变量，它继承自FCycleCounter，它是个基于scope的变量，在构造的时候会调用FCycleCounter的start，start就会开始设定这个FStat__ StatId的统计，而析构的时候他调用FCycleCounter的stop来停止收集。
+&emsp;&emsp;Stats系统，基于插桩(Tag)，即在需要测试的代码前后插入Tag，来获取其运行时间或其他消耗数据。<br>
+&emsp;&emsp;Stats系统有多种类型的stat，可用于cpu、gpu消耗，也可用于统计DrawCall和对象实例数量以及内存消耗等。Stats可以支持的数据类型如下：<br>
+1、Cycle Counter：泛型循环计数器，用于统计数据对象生命周期中的循环次数。<br>
+2、Float/Dword Counter：每帧都会清空的计数器。<br>
+3、Float/Dword Accumulator：不会每帧清空的计数器，作为可重置的持久统计数据。<br>
+4、Memory：特殊类型的计数器，针对内存跟踪进行优化。<br>
 
 ### 3.1.2 扩展定制Stats系统
-&emsp;&emsp;UE的RHIcommandlist自带了一个函数FRHICommandListImmediate::SetCurrentStat，可以用来让Render给RHI加一个标记，这个标记就可以认为是Render的某个阶段的名字，UE自带了在Render的很多阶段下了这个标记，我们还可以自己补充，这个函数的原理如下：
-![StatsTag\label{fig:StatsTag}](StatsTag.png)
-&emsp;&emsp;这个status本身也是以command的形式插入队列，所以每一条RHI执行的cmd会被统计到它之前最近的那个status tag下面，通过不断的细分插入这些tag，我们可以跟踪到RHI的cmd从是在Render的哪个阶段被产生。
+&emsp;&emsp;通过UE内置的Stat命令，我们可以获取大部分常用的数据。但上文提到过，根据项目需要，为了给反馈控制模块提供精细控制策略的数据，我们需要定制Stat系统，获取某些特殊函数调用的消耗。UE的RHIcommandlist内置函数FRHICommandListImmediate::SetCurrentStat，可以通过Renerer Thread调用，统计RHI Thread的多个Commmand执行的Tag标记，细分这些Tag，可以定位我们需要监控的Renderer Thread和RHI Thread的热点。同理，我们也可以通过类似的插桩机制，来监控Game Thread的热点。
 
 # 4.反馈控制部分
-&emsp;&emsp;在介绍反馈控制部分的各个模块之前，我们首先明确两个概念：低帧率和卡顿。<br>
-&emsp;&emsp;首先低帧率和卡顿是两种完全不同的瓶颈类型，虽然归根到底都是某个函数执行的过慢引起的，但是定位和解决方法并不一样。低帧率瓶颈是需要统计一段时间内CPU把更多的时钟耗费在了哪些函数上，或统计一段时间内各个函数占用的cpu时间百分比，找到百分比高的将其优化，就会使帧率得到整体的提高。卡顿则是在一帧的一次运行内某段代码的运行产生了比平均情况明显的长时间，需要定义这段代码的起始点，分别进行计时，然后在连续的统计数据中找到峰值。简单来说帧率瓶颈是统计平均的CPU占用，而卡顿是找峰值。<br>
-&emsp;&emsp;需要指出的是，本文提出的场景复杂度控制系统，目标在于改善和优化低帧率问题，能缓解部分加载引起的卡顿问题。
+&emsp;&emsp;在介绍反馈控制部分的各个模块之前，我们首先明确两个概念：低帧率和卡顿。首先，表现上，低帧率和卡顿都是会让游戏运行时FPS变慢，区别是低帧率是长时间持续性，卡顿是短时间间断性。其次，起因上，低帧率通常是当前场景复杂度过高造成，导致某些函数调用消耗过高，而卡顿往往不合理的资源调用触发，导致函数调用或系统同步时间过长，比如一帧内IO消耗、对象序列化、对象实例化或垃圾回收等。<br>
+&emsp;&emsp;需要指出的是，本文提出的场景复杂度控制系统，能缓解部分加载引起的卡顿问题，但最终目标在于改善和优化低帧率问题，即控制场景复杂度在某个合理区间内。
 
 ## 4.1 复杂度控制模块
 &emsp;&emsp;在游戏运行时，当场景对象确定之后，复杂度控制的本质就是如何在设定的策略和有限的硬件资源条件下，尽可能多的显示更多更好的物件，即在性能和画面之间取得一个较好的平衡。在本方案中，为了达到获取平滑FPS的目的，需要保持场景复杂度在一个预期范围内，我们通过智能控制场景中对象的加载卸载、显示隐藏、LOD控制等手段来实现。下图是我们采用的模块示意图：
 ![复杂度控制模块\label{fig:ObjectPool}](ObjectPool.png)
-&emsp;&emsp;首先我们会根据当前的复杂度数据，选择出需要控制的对象类别，然后在该类别的对象列表中，根据对象评分的排序，选择出需要控制的对象，最后根据控制指令控制该对象。<br>
+&emsp;&emsp;首先我们会根据当前的复杂度数据，选择出需要控制的对象类别，然后在该类别的对象列表中，根据对象评分的排序，选择出需要控制的对象，最后根据控制指令对该对象进行相应处理。<br>
 &emsp;&emsp;本方案的复杂度控制模块，会接受三个类型的控制指令：调整LOD、显示隐藏对象、加载卸载对象。这三条指令的调整力度依次增强。其中：<br>
-1、调整LOD，选择特定的LOD，直观的表现是调整画面细节。当GPU、CPU，或者内存、带宽任意一个核心要素出现超负载时，应该优先考虑选择调整LOD。其中特殊的基于LOD的优化手段，包括HLOD、地形低模代理等，可以减少DrawCall和RHI Thread负荷，但是会增加内存使用量；植被的Imposter优化，可以降低GPU Thread渲染消耗和Render Thread对象管理消耗；低等级的动画或者物理计算，有助于减少Game Thread消耗。<br>
+1、调整LOD，选择特定的LOD，直观的表现是调整画面细节。当GPU、CPU，或者内存、带宽任意一个核心要素出现超负载时，应该优先考虑选择调整LOD。其中特殊的基于LOD的优化手段，包括HLOD、地形低模代理等，可以减少DrawCall和RHI Thread负荷，但是会增加内存使用量；植被的Imposter优化，可以降低GPU Thread渲染消耗和Render Thread对象管理消耗；低细节的动画或者物理计算，有助于减少Game Thread消耗。<br>
 2、显示隐藏对象，包括显示隐藏单个场景对象，和调整对象实例群的scalability。当RHI Thread的CPU耗时过少/过多或者GPU Thread的GPU耗时过少/过多告警时，应该考虑显示/隐藏场景对象。<br>
 3、加载卸载对象，这种策略通常用基于内存方面的考虑。在内存富余时，加载对象；内存告警时，卸载对象。<br>
 
